@@ -1,19 +1,25 @@
 #![feature(portable_simd)]
 
 mod filter;
+mod editor;
 
 use crate::filter::{Biquad, BiquadCoefficients};
 use nih_plug::prelude::*;
 use std::simd::f32x2;
 use std::sync::Arc;
+use crossbeam::atomic::AtomicCell;
+use nih_plug_egui::EguiState;
+use crate::editor::create_editor;
 
 // This is a shortened version of the gain example with most comments removed, check out
 // https://github.com/robbert-vdh/nih-plug/blob/master/plugins/examples/gain/src/lib.rs to get
 // started
 
 const MAX_BLOCK_SIZE: usize = 64;
-const NUM_VOICES: u32 = 16;
-const NUM_FILTERS: usize = 8;
+pub const NUM_VOICES: u32 = 16;
+pub const NUM_FILTERS: usize = 8;
+
+pub type FrequencyDisplay = [[AtomicCell<Option<f32>>; NUM_FILTERS]; NUM_VOICES as usize];
 
 #[derive(Clone)]
 struct Voice {
@@ -31,16 +37,17 @@ struct Voice {
 struct ScaleColorizr {
     params: Arc<ScaleColorizrParams>,
     voices: [Option<Voice>; NUM_VOICES as usize],
+    dry_signal: [f32x2; MAX_BLOCK_SIZE],
+    frequency_display: Arc<FrequencyDisplay>,
     next_internal_voice_id: u64,
     filter: Biquad<f32x2>,
 }
 
 #[derive(Params)]
 struct ScaleColorizrParams {
-    /// The parameter's ID is used to identify the parameter in the wrappred plugin API. As long as
-    /// these IDs remain constant, you can rename and reorder these fields as you wish. The
-    /// parameters are exposed to the host in the same order they were defined. In this case, this
-    /// gain parameter is stored as linear gain while the values are displayed in decibels.
+    #[persist = "editor-state"]
+    pub editor_state: Arc<EguiState>,
+    
     #[id = "gain"]
     pub gain: FloatParam,
 }
@@ -51,6 +58,8 @@ impl Default for ScaleColorizr {
             params: Arc::new(ScaleColorizrParams::default()),
             // TODO: this feels dumb
             voices: [0; NUM_VOICES as usize].map(|_| None),
+            dry_signal: Default::default(),
+            frequency_display: Arc::new(core::array::from_fn(|_| core::array::from_fn(|_| AtomicCell::default()))),
             next_internal_voice_id: 0,
             filter: Biquad::default(),
         }
@@ -60,6 +69,7 @@ impl Default for ScaleColorizr {
 impl Default for ScaleColorizrParams {
     fn default() -> Self {
         Self {
+            editor_state: editor::default_editor_state(),
             gain: FloatParam::new(
                 "Band Gain",
                 10.0,
@@ -113,6 +123,10 @@ impl Plugin for ScaleColorizr {
 
     fn params(&self) -> Arc<dyn Params> {
         self.params.clone()
+    }
+
+    fn editor(&mut self, async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
+        create_editor(self.params.editor_state.clone(), self.frequency_display.clone())
     }
 
     fn initialize(
@@ -240,9 +254,12 @@ impl Plugin for ScaleColorizr {
                         let amp = gain[value_idx] * voice.velocity_sqrt * voice_amp_envelope[value_idx];
                         let mut sample =
                             f32x2::from_array([output[0][sample_idx], output[1][sample_idx]]);
+                        self.dry_signal[value_idx] = sample;
 
                         for (filter_idx, filter) in voice.filters.iter_mut().enumerate() {
-                            filter.coefficients = BiquadCoefficients::peaking_eq(sample_rate, voice.frequency * (filter_idx as f32 + 1.0), amp, 40.0);
+                            let frequency = voice.frequency * (filter_idx as f32 + 1.0);
+                            filter.coefficients = BiquadCoefficients::peaking_eq(sample_rate, frequency, amp, 40.0);
+                            filter.frequency = frequency;
                             sample = filter.process(sample);
                         }
 
@@ -273,6 +290,20 @@ impl Plugin for ScaleColorizr {
             // And then just keep processing blocks until we've run out of buffer to fill
             block_start = block_end;
             block_end = (block_start + MAX_BLOCK_SIZE).min(num_samples);
+        }
+
+        if self.params.editor_state.is_open() {
+            for (voice, displays) in self.voices.iter().zip(self.frequency_display.iter()) {
+                if let Some(voice) = voice {
+                    for (voice_filter, display) in voice.filters.iter().zip(displays) {
+                        display.store(Some(voice_filter.frequency));
+                    }
+                } else {
+                    for display in displays {
+                        display.store(None);
+                    }
+                }
+            }
         }
 
         ProcessStatus::Normal

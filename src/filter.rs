@@ -11,6 +11,7 @@ use std::simd::f32x2;
 /// The type parameter T  should be either an `f32` or a SIMD type.
 #[derive(Clone, Copy, Debug)]
 pub struct Biquad<T> {
+    pub frequency: f32,
     pub coefficients: BiquadCoefficients<T>,
     s1: T,
     s2: T,
@@ -40,6 +41,7 @@ impl<T: SimdType> Default for Biquad<T> {
     /// Before setting constants the filter should just act as an identity function.
     fn default() -> Self {
         Self {
+            frequency: 0.0,
             coefficients: BiquadCoefficients::identity(),
             s1: T::from_f32(0.0),
             s2: T::from_f32(0.0),
@@ -50,6 +52,7 @@ impl<T: SimdType> Default for Biquad<T> {
 impl<T: SimdType> Biquad<T> {
     pub fn new(biquad_coefficients: BiquadCoefficients<T>) -> Self {
         Self {
+            frequency: 0.0,
             coefficients: biquad_coefficients,
             s1: T::from_f32(0.0),
             s2: T::from_f32(0.0),

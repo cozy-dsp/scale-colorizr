@@ -1,25 +1,22 @@
 #![feature(portable_simd)]
 
-mod filter;
 mod editor;
+mod filter;
 
+use crate::editor::create_editor;
 use crate::filter::{Biquad, BiquadCoefficients};
+use crossbeam::atomic::AtomicCell;
 use nih_plug::prelude::*;
+use nih_plug_egui::EguiState;
 use std::simd::f32x2;
 use std::sync::Arc;
-use crossbeam::atomic::AtomicCell;
-use nih_plug_egui::EguiState;
-use crate::editor::create_editor;
-
-// This is a shortened version of the gain example with most comments removed, check out
-// https://github.com/robbert-vdh/nih-plug/blob/master/plugins/examples/gain/src/lib.rs to get
-// started
 
 const MAX_BLOCK_SIZE: usize = 64;
 pub const NUM_VOICES: u32 = 16;
 pub const NUM_FILTERS: usize = 8;
 
 pub type FrequencyDisplay = [[AtomicCell<Option<f32>>; NUM_FILTERS]; NUM_VOICES as usize];
+pub type BiquadDisplay = [[AtomicCell<Option<BiquadCoefficients<f32x2>>>; NUM_FILTERS]; NUM_VOICES as usize];
 
 #[derive(Clone)]
 struct Voice {
@@ -39,17 +36,20 @@ struct ScaleColorizr {
     voices: [Option<Voice>; NUM_VOICES as usize],
     dry_signal: [f32x2; MAX_BLOCK_SIZE],
     frequency_display: Arc<FrequencyDisplay>,
+    biquad_display: Arc<BiquadDisplay>,
+    sample_rate: Arc<AtomicF32>,
     next_internal_voice_id: u64,
-    filter: Biquad<f32x2>,
 }
 
 #[derive(Params)]
 struct ScaleColorizrParams {
     #[persist = "editor-state"]
     pub editor_state: Arc<EguiState>,
-    
+
     #[id = "gain"]
     pub gain: FloatParam,
+    #[id = "delta"]
+    pub delta: BoolParam,
 }
 
 impl Default for ScaleColorizr {
@@ -58,10 +58,15 @@ impl Default for ScaleColorizr {
             params: Arc::new(ScaleColorizrParams::default()),
             // TODO: this feels dumb
             voices: [0; NUM_VOICES as usize].map(|_| None),
-            dry_signal: Default::default(),
-            frequency_display: Arc::new(core::array::from_fn(|_| core::array::from_fn(|_| AtomicCell::default()))),
+            dry_signal: [f32x2::default(); MAX_BLOCK_SIZE],
+            frequency_display: Arc::new(core::array::from_fn(|_| {
+                core::array::from_fn(|_| AtomicCell::default())
+            })),
+            biquad_display: Arc::new(core::array::from_fn(|_| {
+                core::array::from_fn(|_| AtomicCell::default())
+            })),
+            sample_rate: Arc::new(AtomicF32::new(1.0)),
             next_internal_voice_id: 0,
-            filter: Biquad::default(),
         }
     }
 }
@@ -78,8 +83,11 @@ impl Default for ScaleColorizrParams {
                     max: 40.0,
                 },
             )
-            .with_smoother(SmoothingStyle::Linear(5.0))
+            .with_smoother(SmoothingStyle::Logarithmic(50.0))
+            .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
+            .with_string_to_value(formatters::s2v_f32_gain_to_db())
             .with_unit(" dB"),
+            delta: BoolParam::new("Delta", false),
         }
     }
 }
@@ -125,25 +133,32 @@ impl Plugin for ScaleColorizr {
         self.params.clone()
     }
 
-    fn editor(&mut self, async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
-        create_editor(self.params.editor_state.clone(), self.frequency_display.clone())
+    fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
+        create_editor(
+            self.params.editor_state.clone(),
+            self.sample_rate.clone(),
+            self.params.clone(),
+            self.frequency_display.clone(),
+            self.biquad_display.clone()
+        )
     }
 
     fn initialize(
-        &mut self,
-        _audio_io_layout: &AudioIOLayout,
-        _buffer_config: &BufferConfig,
-        _context: &mut impl InitContext<Self>,
-    ) -> bool {
-        // Resize buffers and perform other potentially expensive initialization operations here.
-        // The `reset()` function is always called right after this function. You can remove this
-        // function if you do not need it.
+            &mut self,
+            audio_io_layout: &AudioIOLayout,
+            buffer_config: &BufferConfig,
+            context: &mut impl InitContext<Self>,
+        ) -> bool {
+        self.sample_rate.store(buffer_config.sample_rate, std::sync::atomic::Ordering::Relaxed);
         true
     }
 
     fn reset(&mut self) {
-        // Reset buffers and envelopes here. This can be called from the audio thread and may not
-        // allocate. You can remove this function if you do not need it.
+        for voice in self.voices.iter_mut() {
+            if voice.is_some() {
+                *voice = None;
+            }
+        }
     }
 
     fn process(
@@ -188,7 +203,6 @@ impl Plugin for ScaleColorizr {
 
                                 let voice = self.start_voice(
                                     context,
-                                    sample_rate,
                                     timing,
                                     voice_id,
                                     channel,
@@ -239,33 +253,45 @@ impl Plugin for ScaleColorizr {
             let mut voice_amp_envelope = [0.0; MAX_BLOCK_SIZE];
             self.params.gain.smoothed.next_block(&mut gain, block_len);
 
-            // TODO: Some form of band limiting
-            // TODO: Filter
-            let voice_count = (self.voices.iter_mut().filter_map(|v| v.as_mut()).count() as f32).max(1.0);
+            for (value_idx, sample_idx) in (block_start..block_end).enumerate() {
+                self.dry_signal[value_idx] =
+                    f32x2::from_array([output[0][sample_idx], output[1][sample_idx]]);
+            }
+
             for voice in self.voices.iter_mut().filter_map(|v| v.as_mut()) {
-                // This is an exponential smoother repurposed as an AR envelope with values between
-                // 0 and 1. When a note off event is received, this envelope will start fading out
-                // again. When it reaches 0, we will terminate the voice.
                 voice
                     .amp_envelope
                     .next_block(&mut voice_amp_envelope, block_len);
-                
-                    for (value_idx, sample_idx) in (block_start..block_end).enumerate() {
-                        let amp = gain[value_idx] * voice.velocity_sqrt * voice_amp_envelope[value_idx];
-                        let mut sample =
-                            f32x2::from_array([output[0][sample_idx], output[1][sample_idx]]);
-                        self.dry_signal[value_idx] = sample;
 
-                        for (filter_idx, filter) in voice.filters.iter_mut().enumerate() {
-                            let frequency = voice.frequency * (filter_idx as f32 + 1.0);
-                            filter.coefficients = BiquadCoefficients::peaking_eq(sample_rate, frequency, amp, 40.0);
-                            filter.frequency = frequency;
-                            sample = filter.process(sample);
-                        }
+                for (value_idx, sample_idx) in (block_start..block_end).enumerate() {
+                    let amp = gain[value_idx] * voice.velocity_sqrt * voice_amp_envelope[value_idx];
+                    let mut sample =
+                        f32x2::from_array([output[0][sample_idx], output[1][sample_idx]]);
 
-                        output[0][sample_idx] = sample.as_array()[0];
-                        output[1][sample_idx] = sample.as_array()[1];
+                    for (filter_idx, filter) in voice.filters.iter_mut().enumerate() {
+                        let frequency = voice.frequency * (filter_idx as f32 + 1.0);
+                        let adjusted_frequency = (frequency - voice.frequency) / (voice.frequency * (NUM_FILTERS/2) as f32);
+                        let amp_falloff = (-adjusted_frequency).exp();
+                        filter.coefficients =
+                            BiquadCoefficients::peaking_eq(sample_rate, frequency, amp * amp_falloff, 40.0);
+                        filter.frequency = frequency;
+                        sample = filter.process(sample);
                     }
+
+                    output[0][sample_idx] = sample.as_array()[0];
+                    output[1][sample_idx] = sample.as_array()[1];
+                }
+            }
+
+            if self.params.delta.value() {
+                for (value_idx, sample_idx) in (block_start..block_end).enumerate() {
+                    let mut sample =
+                        f32x2::from_array([output[0][sample_idx], output[1][sample_idx]]);
+                    sample += self.dry_signal[value_idx] * f32x2::splat(-1.0);
+
+                    output[0][sample_idx] = sample.as_array()[0];
+                    output[1][sample_idx] = sample.as_array()[1];
+                }
             }
 
             // Terminate voices whose release period has fully ended. This could be done as part of
@@ -304,6 +330,18 @@ impl Plugin for ScaleColorizr {
                     }
                 }
             }
+
+            for (voice, displays) in self.voices.iter().zip(self.biquad_display.iter()) {
+                if let Some(voice) = voice {
+                    for (voice_filter, display) in voice.filters.iter().zip(displays) {
+                        display.store(Some(voice_filter.coefficients));
+                    }
+                } else {
+                    for display in displays {
+                        display.store(None);
+                    }
+                }
+            }
         }
 
         ProcessStatus::Normal
@@ -324,7 +362,6 @@ impl ScaleColorizr {
     fn start_voice(
         &mut self,
         context: &mut impl ProcessContext<Self>,
-        sample_rate: f32,
         sample_offset: u32,
         voice_id: Option<i32>,
         channel: u8,

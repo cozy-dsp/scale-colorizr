@@ -19,6 +19,8 @@ crossbeam = "0.8.4"
 # thread in debug builds.
 nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git", features = ["assert_process_allocs", "simd"] }
 nih_plug_egui = { git = "https://github.com/robbert-vdh/nih-plug.git" }
+num-complex = "0.4.5"
+serde = { version = "1.0.197", features = ["derive"] }
 # Uncomment the below line to disable the on-by-default VST3 feature to remove
 # the GPL compatibility requirement
 # nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git", default_features = false, features = ["assert_process_allocs"] }

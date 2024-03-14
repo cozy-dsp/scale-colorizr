@@ -1,4 +1,5 @@
 use nih_plug::debug::nih_debug_assert;
+use num_complex::Complex32;
 use std::f32::consts;
 use std::ops::{Add, Mul, Sub};
 use std::simd::f32x2;
@@ -35,6 +36,7 @@ pub trait SimdType:
     Mul<Output = Self> + Sub<Output = Self> + Add<Output = Self> + Copy + Sized
 {
     fn from_f32(value: f32) -> Self;
+    fn to_f32(self) -> f32;
 }
 
 impl<T: SimdType> Default for Biquad<T> {
@@ -50,15 +52,6 @@ impl<T: SimdType> Default for Biquad<T> {
 }
 
 impl<T: SimdType> Biquad<T> {
-    pub fn new(biquad_coefficients: BiquadCoefficients<T>) -> Self {
-        Self {
-            frequency: 0.0,
-            coefficients: biquad_coefficients,
-            s1: T::from_f32(0.0),
-            s2: T::from_f32(0.0),
-        }
-    }
-
     /// Process a single sample.
     pub fn process(&mut self, sample: T) -> T {
         let result = self.coefficients.b0 * sample + self.s1;
@@ -68,12 +61,12 @@ impl<T: SimdType> Biquad<T> {
 
         result
     }
+}
 
-    /// Reset the state to zero, useful after making making large, non-interpolatable changes to the
-    /// filter coefficients.
-    pub fn reset(&mut self) {
-        self.s1 = T::from_f32(0.0);
-        self.s2 = T::from_f32(0.0);
+impl<T: SimdType> Default for BiquadCoefficients<T> {
+    /// Before setting constants the filter should just act as an identity function.
+    fn default() -> Self {
+        Self::identity()
     }
 }
 
@@ -100,31 +93,7 @@ impl<T: SimdType> BiquadCoefficients<T> {
         })
     }
 
-    /// Compute the coefficients for a bandpass filter.
-    ///
-    /// Based on <http://shepazu.github.io/Audio-EQ-Cookbook/audio-eq-cookbook.html>.
-    pub fn bandpass(sample_rate: f32, frequency: f32, q: f32) -> Self {
-        nih_debug_assert!(sample_rate > 0.0);
-        nih_debug_assert!(frequency > 0.0);
-        nih_debug_assert!(frequency < sample_rate / 2.0);
-        nih_debug_assert!(q > 0.0);
-
-        let omega0 = consts::TAU * (frequency / sample_rate);
-        let (sin_omega0, cos_omega0) = omega0.sin_cos();
-        let alpha = sin_omega0 / (2.0 * q);
-
-        // We'll prenormalize everything with a0
-        let a0 = 1.0 + alpha;
-        let b0 = (q * alpha) / a0;
-        let b1 = 0.;
-        let b2 = (-q * alpha) / a0;
-        let a1 = (-2.0 * cos_omega0) / a0;
-        let a2 = (1.0 - alpha) / a0;
-
-        Self::from_f32s(BiquadCoefficients { b0, b1, b2, a1, a2 })
-    }
-
-    /// Compute the coefficients for a bandpass filter.
+    /// Compute the coefficients for a peaking bell filter.
     ///
     /// Based on <http://shepazu.github.io/Audio-EQ-Cookbook/audio-eq-cookbook.html>.
     pub fn peaking_eq(sample_rate: f32, frequency: f32, db_gain: f32, q: f32) -> Self {
@@ -148,6 +117,12 @@ impl<T: SimdType> BiquadCoefficients<T> {
 
         Self::from_f32s(BiquadCoefficients { b0, b1, b2, a1, a2 })
     }
+
+    pub fn transfer_function(self, z: Complex32) -> Complex32 {
+        let pow1 = z.powi(-1);
+        let pow2 = z.powi(-2);
+        (self.b0.to_f32() + self.b1.to_f32() * pow1 + self.b2.to_f32() * pow2) / (1.0 + self.a1.to_f32() * pow1 + self.a2.to_f32() * pow2)
+    }
 }
 
 impl SimdType for f32 {
@@ -155,11 +130,21 @@ impl SimdType for f32 {
     fn from_f32(value: f32) -> Self {
         value
     }
+
+    #[inline(always)]
+    fn to_f32(self) -> f32 {
+        self
+    } 
 }
 
 impl SimdType for f32x2 {
     #[inline(always)]
     fn from_f32(value: f32) -> Self {
         Self::splat(value)
+    }
+
+    #[inline(always)]
+    fn to_f32(self) -> f32 {
+        self.as_array()[0]
     }
 }

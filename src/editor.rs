@@ -1,15 +1,21 @@
 use crate::{BiquadDisplay, FrequencyDisplay, ScaleColorizrParams};
+use colorgrad::Gradient;
 use crossbeam::atomic::AtomicCell;
-use delaunator::{triangulate, Point};
+use lazy_static::lazy_static;
 use nih_plug::params::smoothing::AtomicF32;
 use nih_plug::prelude::Editor;
 use nih_plug_egui::egui::epaint::{Hsva, PathShape};
-use nih_plug_egui::egui::{Color32, Grid, Mesh, Painter, Pos2, Stroke, Ui, Vec2, Window};
+use nih_plug_egui::egui::{Color32, Grid, Mesh, Painter, Pos2, Rgba, Stroke, Ui, Vec2, Window};
 use nih_plug_egui::{create_egui_editor, egui, EguiState};
+use noise::{NoiseFn, OpenSimplex, Perlin};
 use num_complex::Complex32;
 use serde::{Deserialize, Serialize};
-use std::f32::consts::TAU;
 use std::sync::Arc;
+
+lazy_static! {
+    static ref NOISE: OpenSimplex = OpenSimplex::new(rand::random());
+    static ref ANIMATE_NOISE: Perlin = Perlin::new(rand::random());
+}
 
 #[derive(Default, Serialize, Deserialize)]
 struct EditorState {
@@ -27,6 +33,8 @@ pub fn create(
     displays: Arc<FrequencyDisplay>,
     biquads: Arc<BiquadDisplay>,
 ) -> Option<Box<dyn Editor>> {
+    let gradient = colorgrad::preset::rainbow();
+
     create_egui_editor(
         state,
         EditorState::default(),
@@ -60,6 +68,7 @@ pub fn create(
                     ui,
                     &biquads,
                     sample_rate.load(std::sync::atomic::Ordering::Relaxed),
+                    &gradient,
                 );
 
                 let debug_window = Window::new("DEBUG")
@@ -103,7 +112,12 @@ pub fn create(
     )
 }
 
-fn filter_line(ui: &Ui, biquads: &Arc<BiquadDisplay>, sample_rate: f32) -> Vec<Complex32> {
+fn filter_line<G: Gradient>(
+    ui: &Ui,
+    biquads: &Arc<BiquadDisplay>,
+    sample_rate: f32,
+    gradient: &G,
+) -> Vec<Complex32> {
     let mut debug = Vec::new();
     let painter = Painter::new(
         ui.ctx().clone(),
@@ -125,29 +139,34 @@ fn filter_line(ui: &Ui, biquads: &Arc<BiquadDisplay>, sample_rate: f32) -> Vec<C
         let mut result = Complex32::new(1.0, 0.0);
 
         for biquad in biquads.iter().flatten().filter_map(AtomicCell::load) {
-            result *= biquad.transfer_function((Complex32::i() * TAU * (freq / sample_rate)).exp());
+            result *= biquad.frequency_response(freq);
             debug.push(result);
         }
 
         #[allow(clippy::cast_precision_loss)]
-        points.push(Pos2::new(i as f32, left_center.y - result.norm() * 10.0));
+        points.push(Pos2::new(
+            i as f32,
+            left_center.y - result.norm().log10() * 50.0,
+        ));
     }
 
-    let mut mesh = Mesh::default();
-
-    for (idx, p) in points.iter().enumerate() {
-        let color = Hsva::new(idx as f32 * 0.1, 1.0, 1.0, 1.0);
-        mesh.colored_vertex(*p + Vec2::new(0.0, 1.5), color.into());
-        mesh.colored_vertex(*p - Vec2::new(0.0, 1.5), color.into());
+    // DISGUSTING: i would MUCH rather meshify the line so i can apply shaders
+    // but i couldn't get it to work, so i'm doing this terribleness instead.
+    let animation_position = ui.ctx().frame_nr() as f64 * 0.005;
+    let offset = ANIMATE_NOISE.get([animation_position * 0.01, 0.0]);
+    for (idx, p) in points.array_windows().enumerate() {
+        let x = idx as f64 * 0.002;
+        let noise_value = NOISE.get([x, animation_position + offset]);
+        let color = gradient.at(norm(noise_value as f32, -0.5, 0.5)).to_rgba8();
+        painter.line_segment(
+            *p,
+            Stroke::new(1.5, Color32::from_rgb(color[0], color[1], color[2])),
+        );
     }
-
-    for i in (0..mesh.vertices.len()).step_by(4) {
-        mesh.add_triangle(i as u32, i as u32 + 1, i as u32 + 2);
-        mesh.add_triangle(i as u32 + 1, i as u32 + 2, i as u32 + 3)
-    }
-
-    //painter.add(PathShape::line(points, Stroke::new(1.5, Color32::RED)));
-    painter.add(mesh);
 
     debug
+}
+
+fn norm(t: f32, a: f32, b: f32) -> f32 {
+    (t - a) * (1.0 / (b - a))
 }

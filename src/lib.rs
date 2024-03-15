@@ -1,9 +1,8 @@
 #![feature(portable_simd)]
-
+#![feature(array_windows)]
 mod editor;
-mod filter;
 
-use crate::filter::{Biquad, BiquadCoefficients};
+use cozy_util::filter::{Biquad, BiquadCoefficients};
 use crossbeam::atomic::AtomicCell;
 use nih_plug::prelude::*;
 use nih_plug_egui::EguiState;
@@ -48,6 +47,10 @@ struct ScaleColorizrParams {
 
     #[id = "gain"]
     pub gain: FloatParam,
+    #[id = "attack"]
+    pub attack: FloatParam,
+    #[id = "release"]
+    pub release: FloatParam,
     #[id = "delta"]
     pub delta: BoolParam,
 }
@@ -85,6 +88,24 @@ impl Default for ScaleColorizrParams {
             )
             .with_step_size(0.1)
             .with_unit(" dB"),
+            attack: FloatParam::new(
+                "Attack",
+                2.0,
+                FloatRange::Linear {
+                    min: 2.0,
+                    max: 2000.0,
+                },
+            )
+            .with_unit(" ms"),
+            release: FloatParam::new(
+                "Release",
+                10.0,
+                FloatRange::Linear {
+                    min: 2.0,
+                    max: 2000.0,
+                },
+            )
+            .with_unit(" ms"),
             delta: BoolParam::new("Delta", false),
         }
     }
@@ -174,7 +195,7 @@ impl Plugin for ScaleColorizr {
         // split on note events, it's easier to work with raw audio here and to do the splitting by
         // hand.
         let num_samples = buffer.samples();
-        let sample_rate = context.transport().sample_rate;
+        let sample_rate = self.sample_rate.load(std::sync::atomic::Ordering::Relaxed);
         let output = buffer.as_slice();
 
         let mut next_event = context.next_event();
@@ -198,7 +219,9 @@ impl Plugin for ScaleColorizr {
                                 velocity,
                             } => {
                                 // This starts with the attack portion of the amplitude envelope
-                                let amp_envelope = Smoother::new(SmoothingStyle::Exponential(20.0));
+                                let amp_envelope = Smoother::new(SmoothingStyle::Exponential(
+                                    self.params.attack.value(),
+                                ));
                                 amp_envelope.reset(0.0);
                                 amp_envelope.set_target(sample_rate, 1.0);
 
@@ -353,14 +376,6 @@ impl Plugin for ScaleColorizr {
 }
 
 impl ScaleColorizr {
-    /// Get the index of a voice by its voice ID, if the voice exists. This does not immediately
-    /// reutnr a reference to the voice to avoid lifetime issues.
-    fn get_voice_idx(&mut self, voice_id: i32) -> Option<usize> {
-        self.voices
-            .iter_mut()
-            .position(|voice| matches!(voice, Some(voice) if voice.id == voice_id))
-    }
-
     /// Start a new voice with the given voice ID. If all voices are currently in use, the oldest
     /// voice will be stolen. Returns a reference to the new voice.
     fn start_voice(
@@ -440,7 +455,7 @@ impl ScaleColorizr {
                     || (channel == *candidate_channel && note == *candidate_note) =>
                 {
                     *releasing = true;
-                    amp_envelope.style = SmoothingStyle::Exponential(10.0);
+                    amp_envelope.style = SmoothingStyle::Exponential(self.params.release.value());
                     amp_envelope.set_target(sample_rate, 0.0);
 
                     // If this targetted a single voice ID, we're done here. Otherwise there may be

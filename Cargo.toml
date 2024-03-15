@@ -15,15 +15,15 @@ crate-type = ["cdylib"]
 
 [dependencies]
 crossbeam = "0.8.4"
-# Remove the `assert_process_allocs` feature to allow allocations on the audio
-# thread in debug builds.
+colorgrad = { git = "https://github.com/mazznoer/colorgrad-rs.git" }
+cozy-util = { git = "https://github.com/cozy-dsp/cozy-util.git" }
+lazy_static = "1.4.0"
 nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git", features = ["assert_process_allocs", "simd"] }
 nih_plug_egui = { git = "https://github.com/robbert-vdh/nih-plug.git" }
+noise = "0.8.2"
 num-complex = "0.4.5"
+rand = "0.8.5"
 serde = { version = "1.0.197", features = ["derive"] }
-# Uncomment the below line to disable the on-by-default VST3 feature to remove
-# the GPL compatibility requirement
-# nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git", default_features = false, features = ["assert_process_allocs"] }
 
 [profile.release]
 lto = "thin"

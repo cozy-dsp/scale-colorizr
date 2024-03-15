@@ -299,7 +299,6 @@ impl Plugin for ScaleColorizr {
                             amp * amp_falloff,
                             40.0,
                         );
-                        filter.frequency = frequency;
                         sample = filter.process(sample);
                     }
 
@@ -348,7 +347,7 @@ impl Plugin for ScaleColorizr {
             for (voice, displays) in self.voices.iter().zip(self.frequency_display.iter()) {
                 if let Some(voice) = voice {
                     for (voice_filter, display) in voice.filters.iter().zip(displays) {
-                        display.store(Some(voice_filter.frequency));
+                        display.store(Some(voice_filter.coefficients.frequency()));
                     }
                 } else {
                     for display in displays {

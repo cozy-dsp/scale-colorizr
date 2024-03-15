@@ -3,7 +3,6 @@
 mod editor;
 mod filter;
 
-use crate::editor::create_editor;
 use crate::filter::{Biquad, BiquadCoefficients};
 use crossbeam::atomic::AtomicCell;
 use nih_plug::prelude::*;
@@ -16,11 +15,12 @@ pub const NUM_VOICES: u32 = 16;
 pub const NUM_FILTERS: usize = 8;
 
 pub type FrequencyDisplay = [[AtomicCell<Option<f32>>; NUM_FILTERS]; NUM_VOICES as usize];
-pub type BiquadDisplay = [[AtomicCell<Option<BiquadCoefficients<f32x2>>>; NUM_FILTERS]; NUM_VOICES as usize];
+pub type BiquadDisplay =
+    [[AtomicCell<Option<BiquadCoefficients<f32x2>>>; NUM_FILTERS]; NUM_VOICES as usize];
 
 #[derive(Clone)]
 struct Voice {
-    voice_id: i32,
+    id: i32,
     channel: u8,
     note: u8,
     frequency: f32,
@@ -83,9 +83,7 @@ impl Default for ScaleColorizrParams {
                     max: 40.0,
                 },
             )
-            .with_smoother(SmoothingStyle::Logarithmic(50.0))
-            .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
-            .with_string_to_value(formatters::s2v_f32_gain_to_db())
+            .with_step_size(0.1)
             .with_unit(" dB"),
             delta: BoolParam::new("Delta", false),
         }
@@ -134,27 +132,30 @@ impl Plugin for ScaleColorizr {
     }
 
     fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
-        create_editor(
+        editor::create(
             self.params.editor_state.clone(),
             self.sample_rate.clone(),
             self.params.clone(),
             self.frequency_display.clone(),
-            self.biquad_display.clone()
+            self.biquad_display.clone(),
         )
     }
 
     fn initialize(
-            &mut self,
-            audio_io_layout: &AudioIOLayout,
-            buffer_config: &BufferConfig,
-            context: &mut impl InitContext<Self>,
-        ) -> bool {
-        self.sample_rate.store(buffer_config.sample_rate, std::sync::atomic::Ordering::Relaxed);
+        &mut self,
+        _audio_io_layout: &AudioIOLayout,
+        buffer_config: &BufferConfig,
+        _context: &mut impl InitContext<Self>,
+    ) -> bool {
+        self.sample_rate.store(
+            buffer_config.sample_rate,
+            std::sync::atomic::Ordering::Relaxed,
+        );
         true
     }
 
     fn reset(&mut self) {
-        for voice in self.voices.iter_mut() {
+        for voice in &mut self.voices {
             if voice.is_some() {
                 *voice = None;
             }
@@ -201,13 +202,8 @@ impl Plugin for ScaleColorizr {
                                 amp_envelope.reset(0.0);
                                 amp_envelope.set_target(sample_rate, 1.0);
 
-                                let voice = self.start_voice(
-                                    context,
-                                    timing,
-                                    voice_id,
-                                    channel,
-                                    note,
-                                );
+                                let voice =
+                                    self.start_voice(context, timing, voice_id, channel, note);
                                 voice.velocity_sqrt = velocity.sqrt();
                                 voice.amp_envelope = amp_envelope;
                             }
@@ -218,7 +214,7 @@ impl Plugin for ScaleColorizr {
                                 note,
                                 velocity: _,
                             } => {
-                                self.start_release_for_voices(sample_rate, voice_id, channel, note)
+                                self.start_release_for_voices(sample_rate, voice_id, channel, note);
                             }
                             NoteEvent::Choke {
                                 timing,
@@ -269,11 +265,18 @@ impl Plugin for ScaleColorizr {
                         f32x2::from_array([output[0][sample_idx], output[1][sample_idx]]);
 
                     for (filter_idx, filter) in voice.filters.iter_mut().enumerate() {
+                        #[allow(clippy::cast_precision_loss)]
                         let frequency = voice.frequency * (filter_idx as f32 + 1.0);
-                        let adjusted_frequency = (frequency - voice.frequency) / (voice.frequency * (NUM_FILTERS/2) as f32);
+                        #[allow(clippy::cast_precision_loss)]
+                        let adjusted_frequency = (frequency - voice.frequency)
+                            / (voice.frequency * (NUM_FILTERS / 2) as f32);
                         let amp_falloff = (-adjusted_frequency).exp();
-                        filter.coefficients =
-                            BiquadCoefficients::peaking_eq(sample_rate, frequency, amp * amp_falloff, 40.0);
+                        filter.coefficients = BiquadCoefficients::peaking_eq(
+                            sample_rate,
+                            frequency,
+                            amp * amp_falloff,
+                            40.0,
+                        );
                         filter.frequency = frequency;
                         sample = filter.process(sample);
                     }
@@ -296,14 +299,15 @@ impl Plugin for ScaleColorizr {
 
             // Terminate voices whose release period has fully ended. This could be done as part of
             // the previous loop but this is simpler.
-            for voice in self.voices.iter_mut() {
+            for voice in &mut self.voices {
                 match voice {
                     Some(v) if v.releasing && v.amp_envelope.previous_value() == 0.0 => {
                         // This event is very important, as it allows the host to manage its own modulation
                         // voices
+                        #[allow(clippy::cast_possible_truncation)]
                         context.send_event(NoteEvent::VoiceTerminated {
                             timing: block_end as u32,
-                            voice_id: Some(v.voice_id),
+                            voice_id: Some(v.id),
                             channel: v.channel,
                             note: v.note,
                         });
@@ -354,7 +358,7 @@ impl ScaleColorizr {
     fn get_voice_idx(&mut self, voice_id: i32) -> Option<usize> {
         self.voices
             .iter_mut()
-            .position(|voice| matches!(voice, Some(voice) if voice.voice_id == voice_id))
+            .position(|voice| matches!(voice, Some(voice) if voice.id == voice_id))
     }
 
     /// Start a new voice with the given voice ID. If all voices are currently in use, the oldest
@@ -367,9 +371,10 @@ impl ScaleColorizr {
         channel: u8,
         note: u8,
     ) -> &mut Voice {
+        #[allow(clippy::cast_precision_loss)]
         let freq = util::midi_note_to_freq(note) / (NUM_FILTERS / 2) as f32;
         let new_voice = Voice {
-            voice_id: voice_id.unwrap_or_else(|| compute_fallback_voice_id(note, channel)),
+            id: voice_id.unwrap_or_else(|| compute_fallback_voice_id(note, channel)),
             internal_voice_id: self.next_internal_voice_id,
             channel,
             note,
@@ -383,40 +388,34 @@ impl ScaleColorizr {
         };
         self.next_internal_voice_id = self.next_internal_voice_id.wrapping_add(1);
 
-        // Can't use `.iter_mut().find()` here because nonlexical lifetimes don't apply to return
-        // values
-        match self.voices.iter().position(|voice| voice.is_none()) {
-            Some(free_voice_idx) => {
-                self.voices[free_voice_idx] = Some(new_voice);
-                return self.voices[free_voice_idx].as_mut().unwrap();
-            }
-            None => {
-                // If there is no free voice, find and steal the oldest one
-                // SAFETY: We can skip a lot of checked unwraps here since we already know all voices are in
-                //         use
-                let oldest_voice = unsafe {
-                    self.voices
-                        .iter_mut()
-                        .min_by_key(|voice| voice.as_ref().unwrap_unchecked().internal_voice_id)
-                        .unwrap_unchecked()
-                };
-
-                // The stolen voice needs to be terminated so the host can reuse its modulation
-                // resources
-                {
-                    let oldest_voice = oldest_voice.as_ref().unwrap();
-                    context.send_event(NoteEvent::VoiceTerminated {
-                        timing: sample_offset,
-                        voice_id: Some(oldest_voice.voice_id),
-                        channel: oldest_voice.channel,
-                        note: oldest_voice.note,
-                    });
-                }
-
-                *oldest_voice = Some(new_voice);
-                return oldest_voice.as_mut().unwrap();
-            }
+        if let Some(free_voice_idx) = self.voices.iter().position(Option::is_none) {
+            self.voices[free_voice_idx] = Some(new_voice);
+            return self.voices[free_voice_idx].as_mut().unwrap();
         }
+        // If there is no free voice, find and steal the oldest one
+        // SAFETY: We can skip a lot of checked unwraps here since we already know all voices are in
+        //         use
+        let oldest_voice = unsafe {
+            self.voices
+                .iter_mut()
+                .min_by_key(|voice| voice.as_ref().unwrap_unchecked().internal_voice_id)
+                .unwrap_unchecked()
+        };
+
+        // The stolen voice needs to be terminated so the host can reuse its modulation
+        // resources
+        {
+            let oldest_voice = oldest_voice.as_ref().unwrap();
+            context.send_event(NoteEvent::VoiceTerminated {
+                timing: sample_offset,
+                voice_id: Some(oldest_voice.id),
+                channel: oldest_voice.channel,
+                note: oldest_voice.note,
+            });
+        }
+
+        *oldest_voice = Some(new_voice);
+        return oldest_voice.as_mut().unwrap();
     }
 
     /// Start the release process for one or more voice by changing their amplitude envelope. If
@@ -428,10 +427,10 @@ impl ScaleColorizr {
         channel: u8,
         note: u8,
     ) {
-        for voice in self.voices.iter_mut() {
+        for voice in &mut self.voices {
             match voice {
                 Some(Voice {
-                    voice_id: candidate_voice_id,
+                    id: candidate_voice_id,
                     channel: candidate_channel,
                     note: candidate_note,
                     releasing,
@@ -467,10 +466,10 @@ impl ScaleColorizr {
         channel: u8,
         note: u8,
     ) {
-        for voice in self.voices.iter_mut() {
+        for voice in &mut self.voices {
             match voice {
                 Some(Voice {
-                    voice_id: candidate_voice_id,
+                    id: candidate_voice_id,
                     channel: candidate_channel,
                     note: candidate_note,
                     ..

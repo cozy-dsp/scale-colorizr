@@ -1,3 +1,5 @@
+#![allow(clippy::inline_always)]
+
 use nih_plug::debug::nih_debug_assert;
 use num_complex::Complex32;
 use std::f32::consts;
@@ -109,9 +111,9 @@ impl<T: SimdType> BiquadCoefficients<T> {
 
         // We'll prenormalize everything with a0
         let a0 = 1.0 + alpha / a;
-        let b0 = (1.0 + alpha * a) / a0;
+        let b0 = alpha.mul_add(a, 1.0) / a0;
         let b1 = (-2.0 * cos_omega0) / a0;
-        let b2 = (1.0 - alpha * a) / a0;
+        let b2 = alpha.mul_add(-a, 1.0) / a0;
         let a1 = (-2.0 * cos_omega0) / a0;
         let a2 = (1.0 - alpha / a) / a0;
 
@@ -121,7 +123,8 @@ impl<T: SimdType> BiquadCoefficients<T> {
     pub fn transfer_function(self, z: Complex32) -> Complex32 {
         let pow1 = z.powi(-1);
         let pow2 = z.powi(-2);
-        (self.b0.to_f32() + self.b1.to_f32() * pow1 + self.b2.to_f32() * pow2) / (1.0 + self.a1.to_f32() * pow1 + self.a2.to_f32() * pow2)
+        (self.b0.to_f32() + self.b1.to_f32() * pow1 + self.b2.to_f32() * pow2)
+            / (1.0 + self.a1.to_f32() * pow1 + self.a2.to_f32() * pow2)
     }
 }
 
@@ -134,7 +137,7 @@ impl SimdType for f32 {
     #[inline(always)]
     fn to_f32(self) -> f32 {
         self
-    } 
+    }
 }
 
 impl SimdType for f32x2 {

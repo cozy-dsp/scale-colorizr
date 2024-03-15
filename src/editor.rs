@@ -1,21 +1,17 @@
+#![allow(clippy::cast_precision_loss)]
+#![allow(clippy::cast_possible_truncation)]
+
 use crate::{BiquadDisplay, FrequencyDisplay, ScaleColorizrParams};
-use colorgrad::Gradient;
+use colorgrad::{Color, Gradient};
 use crossbeam::atomic::AtomicCell;
-use lazy_static::lazy_static;
-use nih_plug::params::smoothing::AtomicF32;
 use nih_plug::prelude::Editor;
-use nih_plug_egui::egui::epaint::{Hsva, PathShape};
-use nih_plug_egui::egui::{Color32, Grid, Mesh, Painter, Pos2, Rgba, Stroke, Ui, Vec2, Window};
+use nih_plug_egui::egui::{Color32, Grid, Painter, Pos2, Stroke, Ui, Window};
 use nih_plug_egui::{create_egui_editor, egui, EguiState};
 use noise::{NoiseFn, OpenSimplex, Perlin};
 use num_complex::Complex32;
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-
-lazy_static! {
-    static ref NOISE: OpenSimplex = OpenSimplex::new(rand::random());
-    static ref ANIMATE_NOISE: Perlin = Perlin::new(rand::random());
-}
 
 #[derive(Default, Serialize, Deserialize)]
 struct EditorState {
@@ -28,7 +24,6 @@ pub fn default_editor_state() -> Arc<EguiState> {
 
 pub fn create(
     state: Arc<EguiState>,
-    sample_rate: Arc<AtomicF32>,
     params: Arc<ScaleColorizrParams>,
     displays: Arc<FrequencyDisplay>,
     biquads: Arc<BiquadDisplay>,
@@ -67,7 +62,6 @@ pub fn create(
                 let debug_complex = filter_line(
                     ui,
                     &biquads,
-                    sample_rate.load(std::sync::atomic::Ordering::Relaxed),
                     &gradient,
                 );
 
@@ -115,9 +109,11 @@ pub fn create(
 fn filter_line<G: Gradient>(
     ui: &Ui,
     biquads: &Arc<BiquadDisplay>,
-    sample_rate: f32,
     gradient: &G,
 ) -> Vec<Complex32> {
+    static NOISE: Lazy<OpenSimplex> = Lazy::new(|| OpenSimplex::new(rand::random()));
+    static ANIMATE_NOISE: Lazy<Perlin> = Lazy::new(|| Perlin::new(rand::random()));
+
     let mut debug = Vec::new();
     let painter = Painter::new(
         ui.ctx().clone(),
@@ -131,6 +127,8 @@ fn filter_line<G: Gradient>(
 
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let mut points = Vec::with_capacity(len as usize);
+
+    let is_active = biquads.iter().flatten().any(|b| b.load().is_some());
 
     #[allow(clippy::cast_possible_truncation)]
     for (idx, i) in (left_center.x as i32..=right_center.x as i32).enumerate() {
@@ -146,7 +144,7 @@ fn filter_line<G: Gradient>(
         #[allow(clippy::cast_precision_loss)]
         points.push(Pos2::new(
             i as f32,
-            left_center.y - result.norm().log10() * 50.0,
+            result.norm().log10().mul_add(-50.0, left_center.y),
         ));
     }
 
@@ -156,8 +154,9 @@ fn filter_line<G: Gradient>(
     let offset = ANIMATE_NOISE.get([animation_position * 0.01, 0.0]);
     for (idx, p) in points.array_windows().enumerate() {
         let x = idx as f64 * 0.002;
-        let noise_value = NOISE.get([x, animation_position + offset]);
-        let color = gradient.at(norm(noise_value as f32, -0.5, 0.5)).to_rgba8();
+        let noise_value = norm(NOISE.get([x, animation_position + offset]) as f32, -0.5, 0.5);
+        let gradient = gradient.at(noise_value);
+        let color = Color::from_hsva(0.0, 0.0, noise_value, 1.0).interpolate_oklab(&gradient, ui.ctx().animate_bool("active".into(), is_active)).to_rgba8();
         painter.line_segment(
             *p,
             Stroke::new(1.5, Color32::from_rgb(color[0], color[1], color[2])),

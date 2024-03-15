@@ -155,7 +155,6 @@ impl Plugin for ScaleColorizr {
     fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
         editor::create(
             self.params.editor_state.clone(),
-            self.sample_rate.clone(),
             self.params.clone(),
             self.frequency_display.clone(),
             self.biquad_display.clone(),

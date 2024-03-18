@@ -2,9 +2,9 @@
 name = "scale_colorizr"
 version = "0.1.0"
 edition = "2021"
-authors = ["METALWINGS DSP <hello@murl.digital>"]
+authors = ["joe sorensen <hello@murl.digital>"]
 license = "GPL-3.0-or-later"
-homepage = "https://crouton.net"
+homepage = "https://cozydsp.space"
 description = "Filter based sound colorizer"
 
 [workspace]
@@ -24,6 +24,7 @@ num-complex = "0.4.5"
 rand = "0.8.5"
 serde = { version = "1.0.197", features = ["derive"] }
 once_cell = { version = "1.19.0", features = ["parking_lot"] }
+stopwatch = "0.0.7"
 
 [profile.release]
 lto = "thin"

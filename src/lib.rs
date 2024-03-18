@@ -113,9 +113,9 @@ impl Default for ScaleColorizrParams {
 
 impl Plugin for ScaleColorizr {
     const NAME: &'static str = "Scale Colorizr";
-    const VENDOR: &'static str = "METALWINGS DSP";
+    const VENDOR: &'static str = "cozy dsp";
     const URL: &'static str = env!("CARGO_PKG_HOMEPAGE");
-    const EMAIL: &'static str = "hello@murl.digital";
+    const EMAIL: &'static str = "hi@cozydsp.space";
 
     const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
@@ -514,21 +514,19 @@ const fn compute_fallback_voice_id(note: u8, channel: u8) -> i32 {
 }
 
 impl ClapPlugin for ScaleColorizr {
-    const CLAP_ID: &'static str = "dsp.metalwings.scale_colorizr";
+    const CLAP_ID: &'static str = "space.cozydsp.scale_colorizr";
     const CLAP_DESCRIPTION: Option<&'static str> = Some("Filter based sound colorizer");
     const CLAP_MANUAL_URL: Option<&'static str> = Some(Self::URL);
     const CLAP_SUPPORT_URL: Option<&'static str> = None;
 
-    // Don't forget to change these features
-    const CLAP_FEATURES: &'static [ClapFeature] = &[ClapFeature::AudioEffect, ClapFeature::Stereo];
+    const CLAP_FEATURES: &'static [ClapFeature] = &[ClapFeature::AudioEffect, ClapFeature::Stereo, ClapFeature::Filter];
 }
 
 impl Vst3Plugin for ScaleColorizr {
-    const VST3_CLASS_ID: [u8; 16] = *b"DMTLWNGSSCLECLZR";
+    const VST3_CLASS_ID: [u8; 16] = *b"COZYDSP_SCLECLZR";
 
-    // And also don't forget to change these categories
     const VST3_SUBCATEGORIES: &'static [Vst3SubCategory] =
-        &[Vst3SubCategory::Fx, Vst3SubCategory::Dynamics];
+        &[Vst3SubCategory::Fx, Vst3SubCategory::Filter];
 }
 
 nih_export_clap!(ScaleColorizr);

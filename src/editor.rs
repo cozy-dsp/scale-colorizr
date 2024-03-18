@@ -3,6 +3,7 @@
 
 use crate::{BiquadDisplay, FrequencyDisplay, ScaleColorizrParams};
 use colorgrad::{Color, Gradient};
+use cozy_util::filter::BiquadCoefficients;
 use crossbeam::atomic::AtomicCell;
 use nih_plug::prelude::Editor;
 use nih_plug_egui::egui::{Color32, Grid, Painter, Pos2, Stroke, Ui, Window};
@@ -11,6 +12,7 @@ use noise::{NoiseFn, OpenSimplex, Perlin};
 use num_complex::Complex32;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
+use stopwatch::Stopwatch;
 use std::sync::Arc;
 
 #[derive(Default, Serialize, Deserialize)]
@@ -59,11 +61,13 @@ pub fn create(
                     },
                 ));
 
-                let debug_complex = filter_line(
+                let filter_line_stopwatch = Stopwatch::start_new();
+                filter_line(
                     ui,
                     &biquads,
                     &gradient,
                 );
+                let draw_time = filter_line_stopwatch.elapsed();
 
                 let debug_window = Window::new("DEBUG")
                     .vscroll(true)
@@ -89,15 +93,7 @@ pub fn create(
                     });
                     ui.collapsing("FREQ GRAPH", |ui| {
                         ui.group(|ui| {
-                            Grid::new("complex").show(ui, |ui| {
-                                for (i, filter) in debug_complex.iter().enumerate() {
-                                    ui.label(format!("{filter}"));
-
-                                    if (i + 1) % 10 == 0 {
-                                        ui.end_row();
-                                    }
-                                }
-                            });
+                            ui.label(format!("drawing filter line took: {:?}", draw_time));
                         })
                     });
                 })
@@ -110,11 +106,10 @@ fn filter_line<G: Gradient>(
     ui: &Ui,
     biquads: &Arc<BiquadDisplay>,
     gradient: &G,
-) -> Vec<Complex32> {
+) {
     static NOISE: Lazy<OpenSimplex> = Lazy::new(|| OpenSimplex::new(rand::random()));
     static ANIMATE_NOISE: Lazy<Perlin> = Lazy::new(|| Perlin::new(rand::random()));
 
-    let mut debug = Vec::new();
     let painter = Painter::new(
         ui.ctx().clone(),
         ui.layer_id(),
@@ -128,18 +123,18 @@ fn filter_line<G: Gradient>(
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let mut points = Vec::with_capacity(len as usize);
 
-    let is_active = biquads.iter().flatten().any(|b| b.load().is_some());
+    let active_biquads: Vec<BiquadCoefficients<_>> = biquads.iter().flatten().filter_map(AtomicCell::load).collect();
+
+    let is_active = !active_biquads.is_empty();
 
     #[allow(clippy::cast_possible_truncation)]
     for (idx, i) in (left_center.x as i32..=right_center.x as i32).enumerate() {
         #[allow(clippy::cast_precision_loss)]
-        let freq = 10_000.0f32.mul_add(idx as f32 / len, 20.0);
-        let mut result = Complex32::new(1.0, 0.0);
+        let freq = 5_000.0f32.mul_add(idx as f32 / len, 20.0);
 
-        for biquad in biquads.iter().flatten().filter_map(AtomicCell::load) {
-            result *= biquad.frequency_response(freq);
-            debug.push(result);
-        }
+        let result = active_biquads.iter()
+            .map(|biquad| biquad.frequency_response(freq))
+            .fold(Complex32::new(1.0, 0.0), |acc, resp| acc * resp);
 
         #[allow(clippy::cast_precision_loss)]
         points.push(Pos2::new(
@@ -162,8 +157,6 @@ fn filter_line<G: Gradient>(
             Stroke::new(1.5, Color32::from_rgb(color[0], color[1], color[2])),
         );
     }
-
-    debug
 }
 
 fn norm(t: f32, a: f32, b: f32) -> f32 {

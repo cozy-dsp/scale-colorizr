@@ -10,7 +10,7 @@ use nih_plug::context::gui::ParamSetter;
 use nih_plug::params::Param;
 use nih_plug::prelude::Editor;
 use nih_plug_egui::egui::{
-    include_image, Color32, Grid, Painter, Pos2, RichText, Stroke, Ui, WidgetText, Window
+    include_image, Color32, Grid, Painter, Pos2, RichText, Stroke, Ui, WidgetText, Window,
 };
 use nih_plug_egui::{create_egui_editor, egui, EguiState};
 use noise::{NoiseFn, OpenSimplex, Perlin};
@@ -131,46 +131,58 @@ pub fn create(
 
             Window::new("DEBUG")
                 .vscroll(true)
-                .open(&mut state.show_debug).show(ctx, |ui| {
-                ui.collapsing("VOICES", |ui| {
-                    for (idx, display) in displays.iter().enumerate() {
-                        ui.group(|ui| {
-                            ui.label(format!("VOICE {idx}"));
-                            Grid::new(format!("voice-{idx}")).show(ui, |ui| {
-                                for (i, filter) in display.iter().enumerate() {
-                                    ui.label(
-                                        filter
-                                            .load()
-                                            .map_or("UNUSED".to_string(), |v| format!("FREQ: {v}")),
-                                    );
+                .open(&mut state.show_debug)
+                .show(ctx, |ui| {
+                    ui.collapsing("VOICES", |ui| {
+                        for (idx, display) in displays.iter().enumerate() {
+                            ui.group(|ui| {
+                                ui.label(format!("VOICE {idx}"));
+                                Grid::new(format!("voice-{idx}")).show(ui, |ui| {
+                                    for (i, filter) in display.iter().enumerate() {
+                                        ui.label(filter.load().map_or("UNUSED".to_string(), |v| {
+                                            format!("FREQ: {v}")
+                                        }));
 
-                                    if (i + 1) % 3 == 0 {
-                                        ui.end_row();
+                                        if (i + 1) % 3 == 0 {
+                                            ui.end_row();
+                                        }
                                     }
-                                }
+                                });
                             });
-                        });
-                    }
+                        }
+                    });
+                    ui.collapsing("FREQ GRAPH", |ui| {
+                        ui.group(|ui| {
+                            ui.label(format!(
+                                "drawing filter line took: {:.2?}",
+                                ui.memory(|memory| memory
+                                    .data
+                                    .get_temp::<Duration>("filter_elapsed".into())
+                                    .unwrap_or_default())
+                            ));
+                        })
+                    });
                 });
-                ui.collapsing("FREQ GRAPH", |ui| {
-                    ui.group(|ui| {
-                        ui.label(format!(
-                            "drawing filter line took: {:.2?}",
-                            ui.memory(|memory| memory
-                                .data
-                                .get_temp::<Duration>("filter_elapsed".into())
-                                .unwrap_or_default())
-                        ));
-                    })
-                });
-            });
 
-            Window::new("ABOUT").vscroll(true).open(&mut state.show_about).show(ctx, |ui| {
-                ui.image(include_image!("../assets/Cozy_logo.png"));
-                ui.heading(RichText::new("SCALE COLORIZR").strong());
-                ui.label(RichText::new(format!("Version {}", env!("VERGEN_GIT_DESCRIBE"))).italics());
-                ui.hyperlink_to("GitHub", env!("CARGO_PKG_HOMEPAGE"));                               
-            });
+            Window::new("ABOUT")
+                .vscroll(true)
+                .open(&mut state.show_about)
+                .show(ctx, |ui| {
+                    ui.image(include_image!("../assets/Cozy_logo.png"));
+                    ui.vertical_centered(|ui| {
+                        ui.heading(RichText::new("SCALE COLORIZR").strong());
+                        ui.label(
+                            RichText::new(format!("Version {}", env!("VERGEN_GIT_DESCRIBE")))
+                                .italics(),
+                        );
+                        ui.hyperlink_to("Homepage", env!("CARGO_PKG_HOMEPAGE"));
+                        ui.separator();
+                        ui.heading(RichText::new("Credits"));
+                        ui.label("Original concept by Virtual Riot");
+                        ui.label("Plugin by joe sorensen");
+                        ui.label("cozy dsp branding and design by gordo");
+                    });
+                });
         },
     )
 }

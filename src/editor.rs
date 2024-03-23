@@ -3,17 +3,50 @@
 
 use crate::{BiquadDisplay, FrequencyDisplay, ScaleColorizrParams};
 use colorgrad::{Color, Gradient};
+use cozy_ui::widgets::button::toggle;
 use cozy_util::filter::BiquadCoefficients;
 use crossbeam::atomic::AtomicCell;
+use nih_plug::context::gui::ParamSetter;
+use nih_plug::params::Param;
 use nih_plug::prelude::Editor;
-use nih_plug_egui::egui::{Color32, Grid, Painter, Pos2, Stroke, Ui, Window};
+use nih_plug_egui::egui::{
+    vec2, Color32, Grid, Layout, Painter, Pos2, Rect, Rounding, Stroke, Ui, Vec2, WidgetText,
+    Window,
+};
 use nih_plug_egui::{create_egui_editor, egui, EguiState};
 use noise::{NoiseFn, OpenSimplex, Perlin};
 use num_complex::Complex32;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
-use stopwatch::Stopwatch;
 use std::sync::Arc;
+use stopwatch::Stopwatch;
+
+use self::utils::{centerer, end_set, get_set, get_set_normalized, start_set};
+
+mod utils;
+
+fn knob<P, Text>(
+    ui: &mut Ui,
+    setter: &ParamSetter,
+    param: &P,
+    diameter: f32,
+    description: Option<Text>,
+) where
+    P: Param,
+    Text: Into<WidgetText>,
+{
+    cozy_ui::widgets::knob(
+        ui,
+        param.name(),
+        Some(param.name().to_uppercase()),
+        description,
+        diameter,
+        get_set_normalized(param, setter),
+        start_set(param, setter),
+        end_set(param, setter),
+        param.default_normalized_value(),
+    );
+}
 
 #[derive(Default, Serialize, Deserialize)]
 struct EditorState {
@@ -35,38 +68,57 @@ pub fn create(
     create_egui_editor(
         state,
         EditorState::default(),
-        |_, _| {},
+        |ctx, _| {
+            cozy_ui::setup(ctx);
+        },
         move |ctx, setter, state| {
             egui::TopBottomPanel::top("menu").show(ctx, |ui| {
-                if ui.button("Debug").clicked() {
-                    state.show_debug = !state.show_debug;
-                }
+                ui.horizontal(|ui| {
+                    if ui.button("Debug").clicked() {
+                        state.show_debug = !state.show_debug;
+                    }
+                    toggle(
+                        ui,
+                        "delta",
+                        Some("Takes the difference between the dry and wet signal, the \"Delta\""),
+                        get_set(&params.delta, setter),
+                        false,
+                        &params.delta.name().to_ascii_uppercase(),
+                        start_set(&params.delta, setter),
+                        end_set(&params.delta, setter),
+                    );
+                })
+            });
+
+            egui::TopBottomPanel::bottom("controls").show(ctx, |ui| {
+                centerer(ui, |ui| {
+                    knob(
+                        ui,
+                        setter,
+                        &params.gain,
+                        50.0,
+                        Some("The band gain used for the filters"),
+                    );
+                    knob(
+                        ui,
+                        setter,
+                        &params.attack,
+                        50.0,
+                        Some("The attack for the filter envelope"),
+                    );
+                    knob(
+                        ui,
+                        setter,
+                        &params.release,
+                        50.0,
+                        Some("The release for the filter envelope"),
+                    );
+                });
             });
 
             egui::CentralPanel::default().show(ctx, |ui| {
-                ui.add(nih_plug_egui::egui::widgets::Slider::from_get_set(
-                    2.0..=40.0,
-                    |new_value| {
-                        new_value.map_or_else(
-                            || f64::from(params.gain.value()),
-                            |v| {
-                                setter.begin_set_parameter(&params.gain);
-                                #[allow(clippy::cast_possible_truncation)]
-                                setter.set_parameter(&params.gain, v as f32);
-                                setter.end_set_parameter(&params.gain);
-
-                                v
-                            },
-                        )
-                    },
-                ));
-
                 let filter_line_stopwatch = Stopwatch::start_new();
-                filter_line(
-                    ui,
-                    &biquads,
-                    &gradient,
-                );
+                filter_line(ui, &biquads, &gradient);
                 let draw_time = filter_line_stopwatch.elapsed();
 
                 let debug_window = Window::new("DEBUG")
@@ -93,7 +145,7 @@ pub fn create(
                     });
                     ui.collapsing("FREQ GRAPH", |ui| {
                         ui.group(|ui| {
-                            ui.label(format!("drawing filter line took: {:?}", draw_time));
+                            ui.label(format!("drawing filter line took: {:.2?}", draw_time));
                         })
                     });
                 })
@@ -102,11 +154,7 @@ pub fn create(
     )
 }
 
-fn filter_line<G: Gradient>(
-    ui: &Ui,
-    biquads: &Arc<BiquadDisplay>,
-    gradient: &G,
-) {
+fn filter_line<G: Gradient>(ui: &Ui, biquads: &Arc<BiquadDisplay>, gradient: &G) {
     static NOISE: Lazy<OpenSimplex> = Lazy::new(|| OpenSimplex::new(rand::random()));
     static ANIMATE_NOISE: Lazy<Perlin> = Lazy::new(|| Perlin::new(rand::random()));
 
@@ -123,7 +171,11 @@ fn filter_line<G: Gradient>(
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let mut points = Vec::with_capacity(len as usize);
 
-    let active_biquads: Vec<BiquadCoefficients<_>> = biquads.iter().flatten().filter_map(AtomicCell::load).collect();
+    let active_biquads: Vec<BiquadCoefficients<_>> = biquads
+        .iter()
+        .flatten()
+        .filter_map(AtomicCell::load)
+        .collect();
 
     let is_active = !active_biquads.is_empty();
 
@@ -132,7 +184,8 @@ fn filter_line<G: Gradient>(
         #[allow(clippy::cast_precision_loss)]
         let freq = 5_000.0f32.mul_add(idx as f32 / len, 20.0);
 
-        let result = active_biquads.iter()
+        let result = active_biquads
+            .iter()
             .map(|biquad| biquad.frequency_response(freq))
             .fold(Complex32::new(1.0, 0.0), |acc, resp| acc * resp);
 
@@ -149,9 +202,15 @@ fn filter_line<G: Gradient>(
     let offset = ANIMATE_NOISE.get([animation_position * 0.01, 0.0]);
     for (idx, p) in points.array_windows().enumerate() {
         let x = idx as f64 * 0.002;
-        let noise_value = norm(NOISE.get([x, animation_position + offset]) as f32, -0.5, 0.5);
+        let noise_value = norm(
+            NOISE.get([x, animation_position + offset]) as f32,
+            -0.5,
+            0.5,
+        );
         let gradient = gradient.at(noise_value);
-        let color = Color::from_hsva(0.0, 0.0, noise_value, 1.0).interpolate_oklab(&gradient, ui.ctx().animate_bool("active".into(), is_active)).to_rgba8();
+        let color = Color::from_hsva(0.0, 0.0, noise_value, 1.0)
+            .interpolate_oklab(&gradient, ui.ctx().animate_bool("active".into(), is_active))
+            .to_rgba8();
         painter.line_segment(
             *p,
             Stroke::new(1.5, Color32::from_rgb(color[0], color[1], color[2])),

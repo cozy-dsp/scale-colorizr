@@ -10,8 +10,7 @@ use nih_plug::context::gui::ParamSetter;
 use nih_plug::params::Param;
 use nih_plug::prelude::Editor;
 use nih_plug_egui::egui::{
-    vec2, Color32, Grid, Layout, Painter, Pos2, Rect, Rounding, Stroke, Ui, Vec2, WidgetText,
-    Window,
+    include_image, Color32, Grid, Painter, Pos2, RichText, Stroke, Ui, WidgetText, Window
 };
 use nih_plug_egui::{create_egui_editor, egui, EguiState};
 use noise::{NoiseFn, OpenSimplex, Perlin};
@@ -19,6 +18,7 @@ use num_complex::Complex32;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use std::time::Duration;
 use stopwatch::Stopwatch;
 
 use self::utils::{centerer, end_set, get_set, get_set_normalized, start_set};
@@ -51,6 +51,7 @@ fn knob<P, Text>(
 #[derive(Default, Serialize, Deserialize)]
 struct EditorState {
     show_debug: bool,
+    show_about: bool,
 }
 
 pub fn default_editor_state() -> Arc<EguiState> {
@@ -70,12 +71,17 @@ pub fn create(
         EditorState::default(),
         |ctx, _| {
             cozy_ui::setup(ctx);
+            egui_extras::install_image_loaders(ctx);
         },
         move |ctx, setter, state| {
             egui::TopBottomPanel::top("menu").show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    if ui.button("Debug").clicked() {
-                        state.show_debug = !state.show_debug;
+                    if ui.button("ABOUT").clicked() {
+                        if ui.input(|input| input.modifiers.shift) {
+                            state.show_debug = !state.show_debug;
+                        } else {
+                            state.show_about = !state.show_about;
+                        }
                     }
                     toggle(
                         ui,
@@ -120,35 +126,50 @@ pub fn create(
                 let filter_line_stopwatch = Stopwatch::start_new();
                 filter_line(ui, &biquads, &gradient);
                 let draw_time = filter_line_stopwatch.elapsed();
+                ui.memory_mut(|memory| memory.data.insert_temp("filter_elapsed".into(), draw_time));
+            });
 
-                let debug_window = Window::new("DEBUG")
-                    .vscroll(true)
-                    .open(&mut state.show_debug);
-                debug_window.show(ctx, |ui| {
-                    ui.collapsing("VOICES", |ui| {
-                        for (idx, display) in displays.iter().enumerate() {
-                            ui.group(|ui| {
-                                ui.label(format!("VOICE {idx}"));
-                                Grid::new(format!("voice-{idx}")).show(ui, |ui| {
-                                    for (i, filter) in display.iter().enumerate() {
-                                        ui.label(filter.load().map_or("UNUSED".to_string(), |v| {
-                                            format!("FREQ: {v}")
-                                        }));
-
-                                        if (i + 1) % 3 == 0 {
-                                            ui.end_row();
-                                        }
-                                    }
-                                });
-                            });
-                        }
-                    });
-                    ui.collapsing("FREQ GRAPH", |ui| {
+            Window::new("DEBUG")
+                .vscroll(true)
+                .open(&mut state.show_debug).show(ctx, |ui| {
+                ui.collapsing("VOICES", |ui| {
+                    for (idx, display) in displays.iter().enumerate() {
                         ui.group(|ui| {
-                            ui.label(format!("drawing filter line took: {:.2?}", draw_time));
-                        })
-                    });
-                })
+                            ui.label(format!("VOICE {idx}"));
+                            Grid::new(format!("voice-{idx}")).show(ui, |ui| {
+                                for (i, filter) in display.iter().enumerate() {
+                                    ui.label(
+                                        filter
+                                            .load()
+                                            .map_or("UNUSED".to_string(), |v| format!("FREQ: {v}")),
+                                    );
+
+                                    if (i + 1) % 3 == 0 {
+                                        ui.end_row();
+                                    }
+                                }
+                            });
+                        });
+                    }
+                });
+                ui.collapsing("FREQ GRAPH", |ui| {
+                    ui.group(|ui| {
+                        ui.label(format!(
+                            "drawing filter line took: {:.2?}",
+                            ui.memory(|memory| memory
+                                .data
+                                .get_temp::<Duration>("filter_elapsed".into())
+                                .unwrap_or_default())
+                        ));
+                    })
+                });
+            });
+
+            Window::new("ABOUT").vscroll(true).open(&mut state.show_about).show(ctx, |ui| {
+                ui.image(include_image!("../assets/Cozy_logo.png"));
+                ui.heading(RichText::new("SCALE COLORIZR").strong());
+                ui.label(RichText::new(format!("Version {}", env!("VERGEN_GIT_DESCRIBE"))).italics());
+                ui.hyperlink_to("GitHub", env!("CARGO_PKG_HOMEPAGE"));                               
             });
         },
     )

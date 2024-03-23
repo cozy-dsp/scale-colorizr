@@ -26,6 +26,12 @@ serde = { version = "1.0.197", features = ["derive"] }
 once_cell = { version = "1.19.0", features = ["parking_lot"] }
 stopwatch = "0.0.7"
 cozy-ui = { git = "https://git.funnydragons.lol/cozy-dsp/cozy-ui.git", version = "0.1.0" }
+egui_extras = { version = "0.26.2", features = ["image"] }
+image = { version = "0.24.9", default-features = false, features = ["png"] }
+
+[build-dependencies]
+anyhow = "1.0.81"
+vergen = { version = "8.3.1", features = ["git", "gitcl"] }
 
 [profile.release]
 lto = "thin"

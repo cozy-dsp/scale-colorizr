@@ -17,14 +17,14 @@ crate-type = ["cdylib"]
 crossbeam = "0.8.4"
 colorgrad = { git = "https://github.com/mazznoer/colorgrad-rs.git" }
 cozy-util = { git = "https://github.com/cozy-dsp/cozy-util.git", version = "0.1.0" }
-nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git", features = ["assert_process_allocs", "simd"] }
-nih_plug_egui = { git = "https://github.com/robbert-vdh/nih-plug.git" }
-noise = "0.8.2"
+nih_plug = { git = "https://github.com/murl-digital/nih-plug.git", features = ["assert_process_allocs", "simd"], branch = "feature/bump-dependencies"}
+nih_plug_egui = { git = "https://github.com/murl-digital/nih-plug.git", branch = "feature/bump-dependencies"}
+noise = "0.9"
 num-complex = "0.4.5"
 rand = "0.8.5"
 serde = { version = "1.0.197", features = ["derive"] }
 once_cell = { version = "1.19.0", features = ["parking_lot"] }
-stopwatch = "0.0.7"
+libsw = "3.3"
 cozy-ui = { git = "https://vcs.cozydsp.space/cozy-dsp/cozy-ui.git", version = "0.1.0" }
 egui_extras = { version = "0.27", features = ["image"] }
 image = { version = "0.24.9", default-features = false, features = ["png"] }

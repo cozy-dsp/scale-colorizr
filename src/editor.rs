@@ -20,7 +20,7 @@ use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
-use stopwatch::Stopwatch;
+use libsw::Sw;
 
 use self::utils::{end_set, get_set, get_set_normalized, start_set};
 
@@ -100,33 +100,33 @@ pub fn create(
             egui::TopBottomPanel::bottom("controls").show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     centered(ctx, ui, |ui| {
-                    knob(
-                        ui,
-                        setter,
-                        &params.gain,
-                        50.0,
-                        Some("The band gain used for the filters"),
-                    );
-                    knob(
-                        ui,
-                        setter,
-                        &params.attack,
-                        50.0,
-                        Some("The attack for the filter envelope"),
-                    );
-                    knob(
-                        ui,
-                        setter,
-                        &params.release,
-                        50.0,
-                        Some("The release for the filter envelope"),
-                    );
-                });
+                        knob(
+                            ui,
+                            setter,
+                            &params.gain,
+                            50.0,
+                            Some("The band gain used for the filters"),
+                        );
+                        knob(
+                            ui,
+                            setter,
+                            &params.attack,
+                            50.0,
+                            Some("The attack for the filter envelope"),
+                        );
+                        knob(
+                            ui,
+                            setter,
+                            &params.release,
+                            50.0,
+                            Some("The release for the filter envelope"),
+                        );
+                    });
                 })
             });
 
             egui::CentralPanel::default().show(ctx, |ui| {
-                let filter_line_stopwatch = Stopwatch::start_new();
+                let filter_line_stopwatch = Sw::new_started();
                 filter_line(ui, &biquads, &gradient);
                 let draw_time = filter_line_stopwatch.elapsed();
                 ui.memory_mut(|memory| memory.data.insert_temp("filter_elapsed".into(), draw_time));

@@ -3,6 +3,7 @@
 
 use crate::{BiquadDisplay, FrequencyDisplay, ScaleColorizrParams};
 use colorgrad::{Color, Gradient};
+use cozy_ui::centered;
 use cozy_ui::widgets::button::toggle;
 use cozy_util::filter::BiquadCoefficients;
 use crossbeam::atomic::AtomicCell;
@@ -21,7 +22,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use stopwatch::Stopwatch;
 
-use self::utils::{centerer, end_set, get_set, get_set_normalized, start_set};
+use self::utils::{end_set, get_set, get_set_normalized, start_set};
 
 mod utils;
 
@@ -97,7 +98,8 @@ pub fn create(
             });
 
             egui::TopBottomPanel::bottom("controls").show(ctx, |ui| {
-                centerer(ui, |ui| {
+                ui.horizontal(|ui| {
+                    centered(ctx, ui, |ui| {
                     knob(
                         ui,
                         setter,
@@ -120,6 +122,7 @@ pub fn create(
                         Some("The release for the filter envelope"),
                     );
                 });
+                })
             });
 
             egui::CentralPanel::default().show(ctx, |ui| {

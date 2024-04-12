@@ -7,11 +7,14 @@ use cozy_ui::centered;
 use cozy_ui::widgets::button::toggle;
 use cozy_util::filter::BiquadCoefficients;
 use crossbeam::atomic::AtomicCell;
+use lyon_path::math::Point;
+use lyon_path::Path;
+use lyon_tessellation::{BuffersBuilder, StrokeOptions, StrokeTessellator, StrokeVertexConstructor, VertexBuffers};
 use nih_plug::context::gui::ParamSetter;
 use nih_plug::params::Param;
 use nih_plug::prelude::Editor;
 use nih_plug_egui::egui::{
-    include_image, Color32, Grid, Painter, Pos2, RichText, Stroke, Ui, WidgetText, Window,
+    include_image, pos2, Color32, Grid, Mesh, Painter, Pos2, RichText, Ui, WidgetText, Window
 };
 use nih_plug_egui::{create_egui_editor, egui, EguiState};
 use noise::{NoiseFn, OpenSimplex, Perlin};
@@ -190,8 +193,34 @@ pub fn create(
     )
 }
 
+struct ColoredVertex {
+    position: Pos2,
+    color: Color32
+}
+
+struct GradientVertex<'a, G: Gradient>(f64, &'a G, f32);
+
+impl<G: Gradient> StrokeVertexConstructor<ColoredVertex> for GradientVertex<'_, G> {
+    fn new_vertex(&mut self, vertex: lyon_tessellation::StrokeVertex) -> ColoredVertex {
+        static NOISE: Lazy<OpenSimplex> = Lazy::new(|| OpenSimplex::new(rand::random()));
+
+        let GradientVertex(animation_position, gradient, interpolate) = self;
+        let noise_value = norm(
+                     NOISE.get([vertex.position_on_path().x as f64 * 0.002, *animation_position]) as f32,
+                     -0.5,
+                     0.5,
+            );
+        let gradient = gradient.at(noise_value);
+
+        let color = Color::from_hsva(0.0, 0.0, noise_value, 1.0)
+            .interpolate_oklab(&gradient, *interpolate)
+            .to_rgba8();
+
+        ColoredVertex { position: pos2(vertex.position().x, vertex.position().y), color: Color32::from_rgb(color[0], color[1], color[2]) }
+    }
+}
+
 fn filter_line<G: Gradient>(ui: &Ui, biquads: &Arc<BiquadDisplay>, gradient: &G) {
-    static NOISE: Lazy<OpenSimplex> = Lazy::new(|| OpenSimplex::new(rand::random()));
     static ANIMATE_NOISE: Lazy<Perlin> = Lazy::new(|| Perlin::new(rand::random()));
 
     let painter = Painter::new(
@@ -236,22 +265,45 @@ fn filter_line<G: Gradient>(ui: &Ui, biquads: &Arc<BiquadDisplay>, gradient: &G)
     // but i couldn't get it to work, so i'm doing this terribleness instead.
     let animation_position = ui.ctx().frame_nr() as f64 * 0.005;
     let offset = ANIMATE_NOISE.get([animation_position * 0.01, 0.0]);
-    for (idx, p) in points.array_windows().enumerate() {
-        let x = idx as f64 * 0.002;
-        let noise_value = norm(
-            NOISE.get([x, animation_position + offset]) as f32,
-            -0.5,
-            0.5,
-        );
-        let gradient = gradient.at(noise_value);
-        let color = Color::from_hsva(0.0, 0.0, noise_value, 1.0)
-            .interpolate_oklab(&gradient, ui.ctx().animate_bool("active".into(), is_active))
-            .to_rgba8();
-        painter.line_segment(
-            *p,
-            Stroke::new(1.5, Color32::from_rgb(color[0], color[1], color[2])),
-        );
+    let mut path_builder = Path::builder();
+    let first = points.first().unwrap();
+    path_builder.begin(Point::new(first.x, first.y));
+    for point in points.iter().skip(1) {
+        path_builder.line_to(Point::new(point.x, point.y));
     }
+    path_builder.end(false);
+
+    let mut buffers: VertexBuffers<ColoredVertex, u32> = VertexBuffers::new();
+    let mut vertex_builder = BuffersBuilder::new(&mut buffers, GradientVertex(animation_position + offset, gradient, ui.ctx().animate_bool("active".into(), is_active)));
+    let mut tessellator = StrokeTessellator::new();
+
+    tessellator.tessellate_path(&path_builder.build(), &StrokeOptions::default().with_line_width(3.0).with_line_join(lyon_path::LineJoin::Round), &mut vertex_builder).unwrap();
+
+    let mut mesh = Mesh::default();
+    for ColoredVertex {position, color} in buffers.vertices {
+        mesh.colored_vertex(position, color)
+    }
+
+    mesh.indices = buffers.indices;
+
+    painter.add(mesh);
+
+    // for (idx, p) in points.array_windows().enumerate() {
+    //     let x = idx as f64 * 0.002;
+    //     let noise_value = norm(
+    //         NOISE.get([x, animation_position + offset]) as f32,
+    //         -0.5,
+    //         0.5,
+    //     );
+    //     let gradient = gradient.at(noise_value);
+    //     let color = Color::from_hsva(0.0, 0.0, noise_value, 1.0)
+    //         .interpolate_oklab(&gradient, ui.ctx().animate_bool("active".into(), is_active))
+    //         .to_rgba8();
+    //     painter.line_segment(
+    //         *p,
+    //         Stroke::new(1.5, Color32::from_rgb(color[0], color[1], color[2])),
+    //     );
+    // }
 }
 
 fn norm(t: f32, a: f32, b: f32) -> f32 {

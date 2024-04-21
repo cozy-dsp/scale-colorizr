@@ -7,14 +7,17 @@ use cozy_ui::centered;
 use cozy_ui::widgets::button::toggle;
 use cozy_util::filter::BiquadCoefficients;
 use crossbeam::atomic::AtomicCell;
+use libsw::Sw;
 use lyon_path::math::Point;
 use lyon_path::Path;
-use lyon_tessellation::{BuffersBuilder, StrokeOptions, StrokeTessellator, StrokeVertexConstructor, VertexBuffers};
+use lyon_tessellation::{
+    BuffersBuilder, StrokeOptions, StrokeTessellator, StrokeVertexConstructor, VertexBuffers,
+};
 use nih_plug::context::gui::ParamSetter;
 use nih_plug::params::Param;
 use nih_plug::prelude::Editor;
 use nih_plug_egui::egui::{
-    include_image, pos2, Color32, Grid, Mesh, Painter, Pos2, RichText, Ui, WidgetText, Window
+    include_image, pos2, Color32, DragValue, Grid, Mesh, Painter, Pos2, RichText, Ui, WidgetText, Window
 };
 use nih_plug_egui::{create_egui_editor, egui, EguiState};
 use noise::{NoiseFn, OpenSimplex, Perlin};
@@ -23,32 +26,28 @@ use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
-use libsw::Sw;
 
 use self::utils::{end_set, get_set, get_set_normalized, start_set};
 
 mod utils;
 
-fn knob<P, Text>(
-    ui: &mut Ui,
-    setter: &ParamSetter,
-    param: &P,
-    diameter: f32,
-    description: Option<Text>,
-) where
+fn knob<P, Text>(ui: &mut Ui, setter: &ParamSetter, param: &P, diameter: f32, description: Text)
+where
     P: Param,
     Text: Into<WidgetText>,
 {
-    cozy_ui::widgets::knob(
-        ui,
+    ui.add(
+        Knob::new(
         param.name(),
-        Some(param.name().to_uppercase()),
-        description,
         diameter,
         get_set_normalized(param, setter),
         start_set(param, setter),
         end_set(param, setter),
-        param.default_normalized_value(),
+        )
+        .label(param.name().to_ascii_uppercase())
+        .description(description)
+        .modulated_value(param.modulated_normalized_value())
+        .default_value(param.default_normalized_value()),
     );
 }
 
@@ -56,6 +55,7 @@ fn knob<P, Text>(
 struct EditorState {
     show_debug: bool,
     show_about: bool,
+    show_settings: bool,
 }
 
 pub fn default_editor_state() -> Arc<EguiState> {
@@ -80,23 +80,25 @@ pub fn create(
         move |ctx, setter, state| {
             egui::TopBottomPanel::top("menu").show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    if ui.button("ABOUT").clicked() {
-                        if ui.input(|input| input.modifiers.shift) {
-                            state.show_debug = !state.show_debug;
+                    let about_debug = if ui.input(|input| input.modifiers.shift) {
+                        &mut state.show_debug
                         } else {
-                            state.show_about = !state.show_about;
-                        }
-                    }
+                        &mut state.show_about
+                    };
+                    *about_debug |= ui.button("ABOUT").clicked();
+                    ui.add(
                     toggle(
-                        ui,
                         "delta",
-                        Some("Takes the difference between the dry and wet signal, the \"Delta\""),
+                            &params.delta.name().to_ascii_uppercase(),
                         get_set(&params.delta, setter),
-                        false,
-                        &params.delta.name().to_ascii_uppercase(),
                         start_set(&params.delta, setter),
                         end_set(&params.delta, setter),
+                        )
+                        .description(
+                            "Takes the difference between the dry and wet signal, the \"Delta\"",
+                        ),
                     );
+                    state.show_settings |= ui.button("SETTINGS").clicked();
                 })
             });
 
@@ -108,21 +110,21 @@ pub fn create(
                             setter,
                             &params.gain,
                             50.0,
-                            Some("The band gain used for the filters"),
+                            "The band gain used for the filters",
                         );
                         knob(
                             ui,
                             setter,
                             &params.attack,
                             50.0,
-                            Some("The attack for the filter envelope"),
+                            "The attack for the filter envelope",
                         );
                         knob(
                             ui,
                             setter,
                             &params.release,
                             50.0,
-                            Some("The release for the filter envelope"),
+                            "The release for the filter envelope",
                         );
                     });
                 })
@@ -188,6 +190,14 @@ pub fn create(
                         ui.label("Plugin by joe sorensen");
                         ui.label("cozy dsp branding and design by gordo");
                     });
+                });
+
+            Window::new("SETTINGS")
+                .open(&mut state.show_settings)
+                .show(ctx, |ui| {
+                    ui.label(RichText::new("This allows the filters to go above the nyquist frequency."));
+                    ui.label(RichText::new("⚠ DO NOT TURN THIS OFF UNLESS YOU KNOW WHAT YOU ARE DOING. THIS WILL BLOW YOUR HEAD OFF ⚠").color(Color32::RED).strong());
+                    ui.add(toggle("safety_switch", "SAFETY SWITCH", get_set(&params.safety_switch, setter), start_set(&params.safety_switch, setter), end_set(&params.safety_switch, setter)));
                 });
         },
     )

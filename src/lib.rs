@@ -53,6 +53,8 @@ struct ScaleColorizrParams {
     pub release: FloatParam,
     #[id = "delta"]
     pub delta: BoolParam,
+    #[id = "safety-switch"]
+    pub safety_switch: BoolParam,
 }
 
 impl Default for ScaleColorizr {
@@ -107,6 +109,7 @@ impl Default for ScaleColorizrParams {
             )
             .with_unit(" ms"),
             delta: BoolParam::new("Delta", false),
+            safety_switch: BoolParam::new("SAFETY SWITCH", true).hide(),
         }
     }
 }
@@ -289,6 +292,11 @@ impl Plugin for ScaleColorizr {
                     for (filter_idx, filter) in voice.filters.iter_mut().enumerate() {
                         #[allow(clippy::cast_precision_loss)]
                         let frequency = voice.frequency * (filter_idx as f32 + 1.0);
+
+                        if self.params.safety_switch.value() && frequency >= sample_rate / 2.0 {
+                            continue;
+                        }
+
                         #[allow(clippy::cast_precision_loss)]
                         let adjusted_frequency = (frequency - voice.frequency)
                             / (voice.frequency * (NUM_FILTERS / 2) as f32);

@@ -5,6 +5,7 @@ use crate::{BiquadDisplay, FrequencyDisplay, ScaleColorizrParams};
 use colorgrad::{Color, Gradient};
 use cozy_ui::centered;
 use cozy_ui::widgets::button::toggle;
+use cozy_ui::widgets::Knob;
 use cozy_util::filter::BiquadCoefficients;
 use crossbeam::atomic::AtomicCell;
 use libsw::Sw;
@@ -38,11 +39,11 @@ where
 {
     ui.add(
         Knob::new(
-        param.name(),
-        diameter,
-        get_set_normalized(param, setter),
-        start_set(param, setter),
-        end_set(param, setter),
+            param.name(),
+            diameter,
+            get_set_normalized(param, setter),
+            start_set(param, setter),
+            end_set(param, setter),
         )
         .label(param.name().to_ascii_uppercase())
         .description(description)
@@ -82,17 +83,17 @@ pub fn create(
                 ui.horizontal(|ui| {
                     let about_debug = if ui.input(|input| input.modifiers.shift) {
                         &mut state.show_debug
-                        } else {
+                    } else {
                         &mut state.show_about
                     };
                     *about_debug |= ui.button("ABOUT").clicked();
                     ui.add(
-                    toggle(
-                        "delta",
+                        toggle(
+                            "delta",
                             &params.delta.name().to_ascii_uppercase(),
-                        get_set(&params.delta, setter),
-                        start_set(&params.delta, setter),
-                        end_set(&params.delta, setter),
+                            get_set(&params.delta, setter),
+                            start_set(&params.delta, setter),
+                            end_set(&params.delta, setter),
                         )
                         .description(
                             "Takes the difference between the dry and wet signal, the \"Delta\"",
@@ -195,6 +196,25 @@ pub fn create(
             Window::new("SETTINGS")
                 .open(&mut state.show_settings)
                 .show(ctx, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("Voice Count");
+                        ui.add(DragValue::from_get_set(|value| {
+                            match value {
+                                Some(v) => {
+                                    setter.begin_set_parameter(&params.voice_count);
+                                    setter.set_parameter_normalized(&params.voice_count, v as f32);
+                                    setter.end_set_parameter(&params.voice_count);
+                                    v
+                                },
+                                None => {
+                                    params.voice_count.modulated_normalized_value() as f64
+                                }
+                            }
+                        }).custom_parser(|s| params.voice_count.string_to_normalized_value(s).map(|v| v as f64)).speed(0.01).clamp_range(0.0..=1.0).custom_formatter(|v, _| {
+                            params.voice_count.normalized_value_to_string(v as f32, false)
+                        }))
+                    });
+                    ui.separator();
                     ui.label(RichText::new("This allows the filters to go above the nyquist frequency."));
                     ui.label(RichText::new("⚠ DO NOT TURN THIS OFF UNLESS YOU KNOW WHAT YOU ARE DOING. THIS WILL BLOW YOUR HEAD OFF ⚠").color(Color32::RED).strong());
                     ui.add(toggle("safety_switch", "SAFETY SWITCH", get_set(&params.safety_switch, setter), start_set(&params.safety_switch, setter), end_set(&params.safety_switch, setter)));
@@ -205,7 +225,7 @@ pub fn create(
 
 struct ColoredVertex {
     position: Pos2,
-    color: Color32
+    color: Color32,
 }
 
 struct GradientVertex<'a, G: Gradient>(f64, &'a G, f32);
@@ -216,17 +236,23 @@ impl<G: Gradient> StrokeVertexConstructor<ColoredVertex> for GradientVertex<'_, 
 
         let GradientVertex(animation_position, gradient, interpolate) = self;
         let noise_value = norm(
-                     NOISE.get([vertex.position_on_path().x as f64 * 0.002, *animation_position]) as f32,
-                     -0.5,
-                     0.5,
-            );
+            NOISE.get([
+                vertex.position_on_path().x as f64 * 0.002,
+                *animation_position,
+            ]) as f32,
+            -0.5,
+            0.5,
+        );
         let gradient = gradient.at(noise_value);
 
         let color = Color::from_hsva(0.0, 0.0, noise_value, 1.0)
             .interpolate_oklab(&gradient, *interpolate)
             .to_rgba8();
 
-        ColoredVertex { position: pos2(vertex.position().x, vertex.position().y), color: Color32::from_rgb(color[0], color[1], color[2]) }
+        ColoredVertex {
+            position: pos2(vertex.position().x, vertex.position().y),
+            color: Color32::from_rgb(color[0], color[1], color[2]),
+        }
     }
 }
 
@@ -284,13 +310,28 @@ fn filter_line<G: Gradient>(ui: &Ui, biquads: &Arc<BiquadDisplay>, gradient: &G)
     path_builder.end(false);
 
     let mut buffers: VertexBuffers<ColoredVertex, u32> = VertexBuffers::new();
-    let mut vertex_builder = BuffersBuilder::new(&mut buffers, GradientVertex(animation_position + offset, gradient, ui.ctx().animate_bool("active".into(), is_active)));
+    let mut vertex_builder = BuffersBuilder::new(
+        &mut buffers,
+        GradientVertex(
+            animation_position + offset,
+            gradient,
+            ui.ctx().animate_bool("active".into(), is_active),
+        ),
+    );
     let mut tessellator = StrokeTessellator::new();
 
-    tessellator.tessellate_path(&path_builder.build(), &StrokeOptions::default().with_line_width(3.0).with_line_join(lyon_path::LineJoin::Round), &mut vertex_builder).unwrap();
+    tessellator
+        .tessellate_path(
+            &path_builder.build(),
+            &StrokeOptions::default()
+                .with_line_width(3.0)
+                .with_line_join(lyon_path::LineJoin::Round),
+            &mut vertex_builder,
+        )
+        .unwrap();
 
     let mut mesh = Mesh::default();
-    for ColoredVertex {position, color} in buffers.vertices {
+    for ColoredVertex { position, color } in buffers.vertices {
         mesh.colored_vertex(position, color)
     }
 

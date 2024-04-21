@@ -10,7 +10,7 @@ use std::simd::f32x2;
 use std::sync::Arc;
 
 const MAX_BLOCK_SIZE: usize = 64;
-pub const NUM_VOICES: u32 = 16;
+pub const NUM_VOICES: usize = 128;
 pub const NUM_FILTERS: usize = 8;
 
 pub type FrequencyDisplay = [[AtomicCell<Option<f32>>; NUM_FILTERS]; NUM_VOICES as usize];
@@ -55,6 +55,8 @@ struct ScaleColorizrParams {
     pub delta: BoolParam,
     #[id = "safety-switch"]
     pub safety_switch: BoolParam,
+    #[id = "voice-count"]
+    pub voice_count: IntParam
 }
 
 impl Default for ScaleColorizr {
@@ -110,6 +112,7 @@ impl Default for ScaleColorizrParams {
             .with_unit(" ms"),
             delta: BoolParam::new("Delta", false),
             safety_switch: BoolParam::new("SAFETY SWITCH", true).hide(),
+            voice_count: IntParam::new("Voices", 16, IntRange::Linear { min: 1, max: NUM_VOICES as i32 })
         }
     }
 }
@@ -409,7 +412,7 @@ impl ScaleColorizr {
         };
         self.next_internal_voice_id = self.next_internal_voice_id.wrapping_add(1);
 
-        if let Some(free_voice_idx) = self.voices.iter().position(Option::is_none) {
+        if let Some(free_voice_idx) = self.voices.iter().take(self.params.voice_count.value() as usize).position(Option::is_none) {
             self.voices[free_voice_idx] = Some(new_voice);
             return self.voices[free_voice_idx].as_mut().unwrap();
         }
@@ -419,6 +422,7 @@ impl ScaleColorizr {
         let oldest_voice = unsafe {
             self.voices
                 .iter_mut()
+                .take(self.params.voice_count.value() as usize)
                 .min_by_key(|voice| voice.as_ref().unwrap_unchecked().internal_voice_id)
                 .unwrap_unchecked()
         };

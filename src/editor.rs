@@ -28,7 +28,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
 
-use self::utils::{end_set, get_set, get_set_normalized, start_set};
+use self::utils::{end_set, get_set, get_set_normalized, begin_set};
 
 mod utils;
 
@@ -42,7 +42,7 @@ where
             param.name(),
             diameter,
             get_set_normalized(param, setter),
-            start_set(param, setter),
+            begin_set(param, setter),
             end_set(param, setter),
         )
         .label(param.name().to_ascii_uppercase())
@@ -92,7 +92,7 @@ pub fn create(
                             "delta",
                             &params.delta.name().to_ascii_uppercase(),
                             get_set(&params.delta, setter),
-                            start_set(&params.delta, setter),
+                            begin_set(&params.delta, setter),
                             end_set(&params.delta, setter),
                         )
                         .description(
@@ -217,7 +217,7 @@ pub fn create(
                     ui.separator();
                     ui.label(RichText::new("This allows the filters to go above the nyquist frequency."));
                     ui.label(RichText::new("⚠ DO NOT TURN THIS OFF UNLESS YOU KNOW WHAT YOU ARE DOING. THIS WILL BLOW YOUR HEAD OFF ⚠").color(Color32::RED).strong());
-                    ui.add(toggle("safety_switch", "SAFETY SWITCH", get_set(&params.safety_switch, setter), start_set(&params.safety_switch, setter), end_set(&params.safety_switch, setter)));
+                    ui.add(toggle("safety_switch", "SAFETY SWITCH", get_set(&params.safety_switch, setter), begin_set(&params.safety_switch, setter), end_set(&params.safety_switch, setter)));
                 });
         },
     )

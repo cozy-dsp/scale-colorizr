@@ -1,6 +1,6 @@
 use nih_plug::{context::gui::ParamSetter, params::Param};
 
-pub fn start_set<'a, P>(param: &'a P, setter: &'a ParamSetter<'a>) -> impl Fn() + 'a
+pub fn begin_set<'a, P>(param: &'a P, setter: &'a ParamSetter<'a>) -> impl Fn() + 'a
 where
     P: Param + 'a,
 {

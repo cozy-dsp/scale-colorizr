@@ -53,3 +53,27 @@ where
         param.unmodulated_plain_value()
     }
 }
+
+pub struct PowersOfTen {
+    current: f32,
+    max: f32,
+}
+
+impl PowersOfTen {
+    pub fn new(min: f32, max: f32) -> Self {
+        Self { current: min, max }
+    }
+}
+
+impl Iterator for PowersOfTen {
+    type Item = f32;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.current = self.current * 10.0;
+        if self.current < self.max {
+            Some(self.current)
+        } else {
+            None
+        }
+    }
+}

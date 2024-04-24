@@ -1,6 +1,7 @@
 #![allow(clippy::cast_precision_loss)]
 #![allow(clippy::cast_possible_truncation)]
 
+use crate::editor::utils::PowersOfTen;
 use crate::{BiquadDisplay, FrequencyDisplay, ScaleColorizrParams};
 use colorgrad::{Color, Gradient};
 use cozy_ui::centered;
@@ -18,17 +19,18 @@ use nih_plug::context::gui::ParamSetter;
 use nih_plug::params::Param;
 use nih_plug::prelude::Editor;
 use nih_plug_egui::egui::{
-    include_image, pos2, Color32, DragValue, Grid, Mesh, Painter, Pos2, RichText, Ui, WidgetText, Window
+    include_image, pos2, Align2, Color32, DragValue, FontId, Grid, Mesh, Pos2, RichText, Stroke, Ui, WidgetText, Window
 };
 use nih_plug_egui::{create_egui_editor, egui, EguiState};
 use noise::{NoiseFn, OpenSimplex, Perlin};
 use num_complex::Complex32;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
+use std::f32::consts::E;
 use std::sync::Arc;
 use std::time::Duration;
 
-use self::utils::{end_set, get_set, get_set_normalized, begin_set};
+use self::utils::{begin_set, end_set, get_set, get_set_normalized};
 
 mod utils;
 
@@ -132,10 +134,16 @@ pub fn create(
             });
 
             egui::CentralPanel::default().show(ctx, |ui| {
-                let filter_line_stopwatch = Sw::new_started();
-                filter_line(ui, &biquads, &gradient);
-                let draw_time = filter_line_stopwatch.elapsed();
-                ui.memory_mut(|memory| memory.data.insert_temp("filter_elapsed".into(), draw_time));
+                egui::Frame::canvas(ui.style())
+                    .stroke(Stroke::new(2.0, Color32::DARK_GRAY))
+                    .show(ui, |ui| {
+                        let filter_line_stopwatch = Sw::new_started();
+                        filter_line(ui, &biquads, &gradient);
+                        let draw_time = filter_line_stopwatch.elapsed();
+                        ui.memory_mut(|memory| {
+                            memory.data.insert_temp("filter_elapsed".into(), draw_time)
+                        });
+                    });
             });
 
             Window::new("DEBUG")
@@ -169,6 +177,15 @@ pub fn create(
                                     .get_temp::<Duration>("filter_elapsed".into())
                                     .unwrap_or_default())
                             ));
+                        });
+                        ui.group(|ui| {
+                            ui.label(format!(
+                                "{:?}",
+                                ui.memory(|m| m
+                                    .data
+                                    .get_temp::<Vec<f32>>("sampled_frequencies".into())
+                                    .unwrap_or_default())
+                            ))
                         })
                     });
                 });
@@ -256,21 +273,15 @@ impl<G: Gradient> StrokeVertexConstructor<ColoredVertex> for GradientVertex<'_, 
     }
 }
 
-fn filter_line<G: Gradient>(ui: &Ui, biquads: &Arc<BiquadDisplay>, gradient: &G) {
+fn filter_line<G: Gradient>(ui: &mut Ui, biquads: &Arc<BiquadDisplay>, gradient: &G) {
     static ANIMATE_NOISE: Lazy<Perlin> = Lazy::new(|| Perlin::new(rand::random()));
+    let (_, rect) = ui.allocate_space(ui.available_size_before_wrap());
 
-    let painter = Painter::new(
-        ui.ctx().clone(),
-        ui.layer_id(),
-        ui.available_rect_before_wrap(),
-    );
-    let left_center = painter.clip_rect().left_center();
-    let right_center = painter.clip_rect().right_center();
-
-    let len = left_center.x - right_center.x;
+    let painter = ui.painter_at(rect);
 
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    let mut points = Vec::with_capacity(len as usize);
+    let mut points = Vec::with_capacity(rect.width().round() as usize);
+    let mut sampled_frequencies = Vec::with_capacity(rect.width().round() as usize);
 
     let active_biquads: Vec<BiquadCoefficients<_>> = biquads
         .iter()
@@ -280,22 +291,66 @@ fn filter_line<G: Gradient>(ui: &Ui, biquads: &Arc<BiquadDisplay>, gradient: &G)
 
     let is_active = !active_biquads.is_empty();
 
+    let log_min = 20.0_f32.log10();
+    let log_max = 15_000_f32.log10();
+
+    let mut previous = 10.0;
+    for max in PowersOfTen::new(10.0, 20_000.0) {
+        for freq in (previous as i32..=max as i32).step_by(max as usize / 10) {
+            let freq = freq.max(20) as f32;
+            let x = ((freq.log10() - log_min) * (rect.width() - 1.0)) / (log_max - log_min)
+                + rect.left();
+            let x2 = (((freq - (max as f32 / 20.0)).log10() - log_min) * (rect.width() - 1.0))
+                / (log_max - log_min)
+                + rect.left();
+            painter.vline(
+                x,
+                rect.y_range(),
+                Stroke::new(1.0, Color32::DARK_GRAY.gamma_multiply(0.5)),
+            );
+
+            if freq == max {
+                painter.text(pos2(x + 5.0, rect.bottom() - 10.0), Align2::LEFT_CENTER, if freq >= 1000.0 {
+                    format!("{:.0}k", max / 1000.0)
+                } else {
+                    format!("{freq:.0}")
+                }, FontId::monospace(10.0), Color32::DARK_GRAY);
+            }
+
+            painter.vline(
+                x2,
+                rect.y_range(),
+                Stroke::new(1.0, Color32::DARK_GRAY.gamma_multiply(0.25)),
+            );
+        }
+        previous = max;
+    }
+
     #[allow(clippy::cast_possible_truncation)]
-    for (idx, i) in (left_center.x as i32..=right_center.x as i32).enumerate() {
-        #[allow(clippy::cast_precision_loss)]
-        let freq = 5_000.0f32.mul_add(idx as f32 / len, 20.0);
+    for i in rect.left() as i32..=rect.right() as i32 {
+        let x = i as f32;
+        let freq = ((log_min * (rect.left() + rect.width() - x - 1.0)
+            + log_max * (x - rect.left()))
+            / ((rect.width() - 1.0) * E.log10()))
+        .exp();
+
+        sampled_frequencies.push(freq);
 
         let result = active_biquads
             .iter()
             .map(|biquad| biquad.frequency_response(freq))
             .fold(Complex32::new(1.0, 0.0), |acc, resp| acc * resp);
 
-        #[allow(clippy::cast_precision_loss)]
         points.push(Pos2::new(
-            i as f32,
-            result.norm().log10().mul_add(-50.0, left_center.y),
+            x,
+            result.norm().log10().mul_add(-50.0, rect.center().y),
         ));
     }
+
+    ui.memory_mut(|m| {
+        m.data
+            .insert_temp("sampled_frequencies".into(), sampled_frequencies)
+    });
 
     // DISGUSTING: i would MUCH rather meshify the line so i can apply shaders
     // but i couldn't get it to work, so i'm doing this terribleness instead.

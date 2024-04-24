@@ -30,7 +30,7 @@ struct Voice {
     amp_envelope: Smoother<f32>,
 }
 
-struct ScaleColorizr {
+pub struct ScaleColorizr {
     params: Arc<ScaleColorizrParams>,
     voices: [Option<Voice>; NUM_VOICES as usize],
     dry_signal: [f32x2; MAX_BLOCK_SIZE],
@@ -56,7 +56,7 @@ struct ScaleColorizrParams {
     #[id = "safety-switch"]
     pub safety_switch: BoolParam,
     #[id = "voice-count"]
-    pub voice_count: IntParam
+    pub voice_count: IntParam,
 }
 
 impl Default for ScaleColorizr {
@@ -112,7 +112,14 @@ impl Default for ScaleColorizrParams {
             .with_unit(" ms"),
             delta: BoolParam::new("Delta", false),
             safety_switch: BoolParam::new("SAFETY SWITCH", true).hide(),
-            voice_count: IntParam::new("Voices", 16, IntRange::Linear { min: 1, max: NUM_VOICES as i32 })
+            voice_count: IntParam::new(
+                "Voices",
+                16,
+                IntRange::Linear {
+                    min: 1,
+                    max: NUM_VOICES as i32,
+                },
+            ),
         }
     }
 }
@@ -412,7 +419,12 @@ impl ScaleColorizr {
         };
         self.next_internal_voice_id = self.next_internal_voice_id.wrapping_add(1);
 
-        if let Some(free_voice_idx) = self.voices.iter().take(self.params.voice_count.value() as usize).position(Option::is_none) {
+        if let Some(free_voice_idx) = self
+            .voices
+            .iter()
+            .take(self.params.voice_count.value() as usize)
+            .position(Option::is_none)
+        {
             self.voices[free_voice_idx] = Some(new_voice);
             return self.voices[free_voice_idx].as_mut().unwrap();
         }

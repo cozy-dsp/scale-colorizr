@@ -37,6 +37,7 @@ pub struct ScaleColorizr {
     frequency_display: Arc<FrequencyDisplay>,
     biquad_display: Arc<BiquadDisplay>,
     sample_rate: Arc<AtomicF32>,
+    midi_event_debug: Arc<AtomicCell<Option<NoteEvent<()>>>>,
     next_internal_voice_id: u64,
 }
 
@@ -73,6 +74,7 @@ impl Default for ScaleColorizr {
                 core::array::from_fn(|_| AtomicCell::default())
             })),
             sample_rate: Arc::new(AtomicF32::new(1.0)),
+            midi_event_debug: Arc::new(AtomicCell::new(None)),
             next_internal_voice_id: 0,
         }
     }
@@ -147,7 +149,7 @@ impl Plugin for ScaleColorizr {
         names: PortNames::const_default(),
     }];
 
-    const MIDI_INPUT: MidiConfig = MidiConfig::Basic;
+    const MIDI_INPUT: MidiConfig = MidiConfig::MidiCCs;
     const MIDI_OUTPUT: MidiConfig = MidiConfig::None;
 
     const SAMPLE_ACCURATE_AUTOMATION: bool = true;
@@ -170,6 +172,7 @@ impl Plugin for ScaleColorizr {
             self.params.editor_state.clone(),
             self.params.clone(),
             self.frequency_display.clone(),
+            self.midi_event_debug.clone(),
             self.biquad_display.clone(),
         )
     }
@@ -259,7 +262,17 @@ impl Plugin for ScaleColorizr {
                             } => {
                                 self.choke_voices(context, timing, voice_id, channel, note);
                             }
-                            _ => (),
+                            NoteEvent::PolyTuning {
+                                voice_id,
+                                channel,
+                                note,
+                                tuning,
+                                ..
+                            } => {
+                                self.midi_event_debug.store(Some(event));
+                                self.retune_voice(voice_id, channel, note, tuning)
+                            }
+                            _ => {}
                         };
 
                         next_event = context.next_event();
@@ -528,6 +541,17 @@ impl ScaleColorizr {
                 }
                 _ => (),
             }
+        }
+    }
+
+    fn retune_voice(&mut self, voice_id: Option<i32>, channel: u8, note: u8, tuning: f32) {
+        if let Some(voice) = self
+            .voices
+            .iter_mut()
+            .filter_map(|v| v.as_mut())
+            .find(|v| voice_id == Some(v.id) || (v.channel == channel && v.note == note))
+        {
+            voice.frequency = util::f32_midi_note_to_freq(note as f32 + tuning);
         }
     }
 }

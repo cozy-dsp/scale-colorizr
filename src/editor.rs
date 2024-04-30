@@ -16,10 +16,12 @@ use lyon_tessellation::{
     BuffersBuilder, StrokeOptions, StrokeTessellator, StrokeVertexConstructor, VertexBuffers,
 };
 use nih_plug::context::gui::ParamSetter;
+use nih_plug::midi::NoteEvent;
 use nih_plug::params::Param;
 use nih_plug::prelude::Editor;
 use nih_plug_egui::egui::{
-    include_image, pos2, Align2, Color32, DragValue, FontId, Grid, Mesh, Pos2, RichText, Stroke, Ui, WidgetText, Window
+    include_image, pos2, Align2, Color32, DragValue, FontId, Grid, Mesh, Pos2, RichText, Stroke,
+    Ui, WidgetText, Window,
 };
 use nih_plug_egui::{create_egui_editor, egui, EguiState};
 use noise::{NoiseFn, OpenSimplex, Perlin};
@@ -69,6 +71,7 @@ pub fn create(
     state: Arc<EguiState>,
     params: Arc<ScaleColorizrParams>,
     displays: Arc<FrequencyDisplay>,
+    midi_debug: Arc<AtomicCell<Option<NoteEvent<()>>>>,
     biquads: Arc<BiquadDisplay>,
 ) -> Option<Box<dyn Editor>> {
     let gradient = colorgrad::preset::rainbow();
@@ -188,6 +191,7 @@ pub fn create(
                             ))
                         })
                     });
+                    ui.collapsing("MIDI", |ui| ui.label(format!("{:?}", midi_debug.load())))
                 });
 
             Window::new("ABOUT")
@@ -310,11 +314,17 @@ fn filter_line<G: Gradient>(ui: &mut Ui, biquads: &Arc<BiquadDisplay>, gradient:
             );
 
             if freq == max {
-                painter.text(pos2(x + 5.0, rect.bottom() - 10.0), Align2::LEFT_CENTER, if freq >= 1000.0 {
-                    format!("{:.0}k", max / 1000.0)
-                } else {
-                    format!("{freq:.0}")
-                }, FontId::monospace(10.0), Color32::DARK_GRAY);
+                painter.text(
+                    pos2(x + 5.0, rect.bottom() - 10.0),
+                    Align2::LEFT_CENTER,
+                    if freq >= 1000.0 {
+                        format!("{:.0}k", max / 1000.0)
+                    } else {
+                        format!("{freq:.0}")
+                    },
+                    FontId::monospace(10.0),
+                    Color32::DARK_GRAY,
+                );
             }
 
             painter.vline(

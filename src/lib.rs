@@ -13,9 +13,9 @@ const MAX_BLOCK_SIZE: usize = 64;
 pub const NUM_VOICES: usize = 128;
 pub const NUM_FILTERS: usize = 8;
 
-pub type FrequencyDisplay = [[AtomicCell<Option<f32>>; NUM_FILTERS]; NUM_VOICES as usize];
+pub type FrequencyDisplay = [[AtomicCell<Option<f32>>; NUM_FILTERS]; NUM_VOICES];
 pub type BiquadDisplay =
-    [[AtomicCell<Option<BiquadCoefficients<f32x2>>>; NUM_FILTERS]; NUM_VOICES as usize];
+    [[AtomicCell<Option<BiquadCoefficients<f32x2>>>; NUM_FILTERS]; NUM_VOICES];
 
 pub const VERSION: &str = env!("VERGEN_GIT_DESCRIBE");
 
@@ -34,7 +34,7 @@ struct Voice {
 
 pub struct ScaleColorizr {
     params: Arc<ScaleColorizrParams>,
-    voices: [Option<Voice>; NUM_VOICES as usize],
+    voices: [Option<Voice>; NUM_VOICES],
     dry_signal: [f32x2; MAX_BLOCK_SIZE],
     frequency_display: Arc<FrequencyDisplay>,
     biquad_display: Arc<BiquadDisplay>,
@@ -67,7 +67,7 @@ impl Default for ScaleColorizr {
         Self {
             params: Arc::new(ScaleColorizrParams::default()),
             // TODO: this feels dumb
-            voices: [0; NUM_VOICES as usize].map(|_| None),
+            voices: [0; NUM_VOICES].map(|_| None),
             dry_signal: [f32x2::default(); MAX_BLOCK_SIZE],
             frequency_display: Arc::new(core::array::from_fn(|_| {
                 core::array::from_fn(|_| AtomicCell::default())

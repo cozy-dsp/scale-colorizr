@@ -69,7 +69,7 @@ impl Iterator for PowersOfTen {
     type Item = f32;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.current = self.current * 10.0;
+        self.current *= 10.0;
         if self.current < self.max {
             Some(self.current)
         } else {

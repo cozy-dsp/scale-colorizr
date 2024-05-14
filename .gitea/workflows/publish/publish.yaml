@@ -1,14 +1,8 @@
-name: Automated Builds
+name: Publish
 
 on:
-  push:
-    branches:
-      - '**'
-    tags:
-      - '*'
-  pull_request:
-    branches:
-      - master
+  release:
+    types: [published]
 
 defaults:
   run:
@@ -21,13 +15,13 @@ jobs:
     strategy:
       matrix:
         include:
-          - { name: ubuntu-20.04,       os: ubuntu-20.04,   cross-target: '' }
-          - { name: macos-universal,    os: macos-11,       cross-target: aarch64-apple-darwin }
-          - { name: windows,            os: windows-latest, cross-target: '' }
+          - { name: ubuntu-20.04,       os: ubuntu-20.04,   cross-target: '', channel: 'linux' }
+          - { name: macos-universal,    os: macos-10,       cross-target: aarch64-apple-darwin, channel: 'osx-universal' }
+          - { name: windows,            os: windows-latest, cross-target: '', channel: 'win' }
     name: Package plugin binaries
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Fetch all git history
         run: git fetch --force --prune --tags --unshallow
 
@@ -37,7 +31,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libasound2-dev libgl-dev libjack-dev libx11-xcb-dev  libxcb1-dev libxcb-dri2-0-dev libxcb-icccm4-dev libxcursor-dev libxkbcommon-dev libxcb-shape0-dev libxcb-xfixes0-dev
 
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         # FIXME: Caching `target/` causes the Windows runner to blow up after some time
         if: startsWith(matrix.os, 'windows')
         with:
@@ -46,7 +40,7 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
           key: ${{ matrix.name }}-${{ matrix.cross-target }}
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         if: "!startsWith(matrix.os, 'windows')"
         with:
           path: |
@@ -76,6 +70,7 @@ jobs:
           runner_name=${{ matrix.name }}
           if [[ $runner_name = 'macos-universal' ]]; then
             export MACOSX_DEPLOYMENT_TARGET=10.13
+            export RUSTFLAGS="-C link-args=-Wl,-undefined,dynamic_lookup"
             cargo xtask bundle-universal "${package_args[@]}" --release
           else
             cross_target=${{ matrix.cross-target }}
@@ -89,15 +84,22 @@ jobs:
       - name: Determine build archive name
         run: |
           # Windows (usually) doesn't like colons in file names
-          echo "ARCHIVE_NAME=scale-colorizr-$(git describe --always)-${{ matrix.name }}" >> "$GITHUB_ENV"
+          echo "ARCHIVE_NAME=scale-colorizr-${{ matrix.name }}" >> "$GITHUB_ENV"
+      - name: Determine version for itch
+        run: |
+          echo "ARCHIVE_VERSION=$(git describe --always)" >> "$GITHUB_ENV"
       - name: Move all packaged plugin into a directory
         run: |
           # GitHub Action strips the top level directory, great, have another one
           mkdir -p "$ARCHIVE_NAME/$ARCHIVE_NAME"
           mv target/bundled/* "$ARCHIVE_NAME/$ARCHIVE_NAME"
       - name: Add an OS-specific readme file with installation instructions
-        run: cp ".github/workflows/readme-${{ runner.os }}.txt" "$ARCHIVE_NAME/$ARCHIVE_NAME/README.txt"
-      - uses: actions/upload-artifact@v3
-        with:
-          name: ${{ env.ARCHIVE_NAME }}
-          path: ${{ env.ARCHIVE_NAME }}
+        run: cp ".gitea/workflows/readme-${{ runner.os }}.txt" "$ARCHIVE_NAME/$ARCHIVE_NAME/README.txt"
+      - uses: Ayowel/butler-to-itch@v1.0.0
+        with: 
+          butler_key: ${{ secrets.BUTLER_CREDENTIALS }}
+          itch_user: cozy-dsp
+          itch_game: scale-colorizr
+          version: ${{ env.ARCHIVE_VERSION }}
+          files: |
+            ${{ matrix.channel }} ${{ env.ARCHIVE_NAME }}

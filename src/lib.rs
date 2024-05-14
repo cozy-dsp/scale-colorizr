@@ -17,6 +17,8 @@ pub type FrequencyDisplay = [[AtomicCell<Option<f32>>; NUM_FILTERS]; NUM_VOICES 
 pub type BiquadDisplay =
     [[AtomicCell<Option<BiquadCoefficients<f32x2>>>; NUM_FILTERS]; NUM_VOICES as usize];
 
+pub const VERSION: &str = env!("VERGEN_GIT_DESCRIBE");
+
 #[derive(Clone)]
 struct Voice {
     id: i32,
@@ -132,7 +134,7 @@ impl Plugin for ScaleColorizr {
     const URL: &'static str = env!("CARGO_PKG_HOMEPAGE");
     const EMAIL: &'static str = "hi@cozydsp.space";
 
-    const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+    const VERSION: &'static str = VERSION;
 
     // The first audio IO layout is used as the default. The other layouts may be selected either
     // explicitly or automatically by the host or the user depending on the plugin API/backend.

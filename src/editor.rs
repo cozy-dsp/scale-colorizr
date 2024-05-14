@@ -2,7 +2,7 @@
 #![allow(clippy::cast_possible_truncation)]
 
 use crate::editor::utils::PowersOfTen;
-use crate::{BiquadDisplay, FrequencyDisplay, ScaleColorizrParams};
+use crate::{BiquadDisplay, FrequencyDisplay, ScaleColorizrParams, VERSION};
 use colorgrad::{Color, Gradient};
 use cozy_ui::centered;
 use cozy_ui::widgets::button::toggle;
@@ -202,7 +202,7 @@ pub fn create(
                     ui.vertical_centered(|ui| {
                         ui.heading(RichText::new("SCALE COLORIZR").strong());
                         ui.label(
-                            RichText::new(format!("Version {}", env!("VERGEN_GIT_DESCRIBE")))
+                            RichText::new(format!("Version {}", VERSION))
                                 .italics(),
                         );
                         ui.hyperlink_to("Homepage", env!("CARGO_PKG_HOMEPAGE"));
@@ -304,7 +304,7 @@ fn filter_line<G: Gradient>(ui: &mut Ui, biquads: &Arc<BiquadDisplay>, gradient:
             let freq = freq.max(20) as f32;
             let x = ((freq.log10() - log_min) * (rect.width() - 1.0)) / (log_max - log_min)
                 + rect.left();
-            let x2 = (((freq - (max as f32 / 20.0)).log10() - log_min) * (rect.width() - 1.0))
+            let x2 = (((freq - (max / 20.0)).log10() - log_min) * (rect.width() - 1.0))
                 / (log_max - log_min)
                 + rect.left();
             painter.vline(

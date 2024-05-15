@@ -2,6 +2,7 @@
 #![allow(clippy::cast_possible_truncation)]
 
 use crate::editor::utils::PowersOfTen;
+use crate::spectrum::SpectrumOutput;
 use crate::{BiquadDisplay, FrequencyDisplay, ScaleColorizrParams, VERSION};
 use colorgrad::{Color, Gradient};
 use cozy_ui::centered;
@@ -10,18 +11,16 @@ use cozy_ui::widgets::Knob;
 use cozy_util::filter::BiquadCoefficients;
 use crossbeam::atomic::AtomicCell;
 use libsw::Sw;
-use lyon_path::math::Point;
-use lyon_path::Path;
-use lyon_tessellation::{
-    BuffersBuilder, StrokeOptions, StrokeTessellator, StrokeVertexConstructor, VertexBuffers,
-};
 use nih_plug::context::gui::ParamSetter;
 use nih_plug::midi::NoteEvent;
+use nih_plug::params::smoothing::AtomicF32;
 use nih_plug::params::Param;
 use nih_plug::prelude::Editor;
+use nih_plug_egui::egui::epaint::{PathShape, PathStroke};
+use nih_plug_egui::egui::mutex::Mutex;
 use nih_plug_egui::egui::{
-    include_image, pos2, Align2, Color32, DragValue, FontId, Grid, Mesh, Pos2, RichText, Stroke,
-    Ui, WidgetText, Window,
+    include_image, pos2, remap_clamp, vec2, Align2, Color32, DragValue, FontId, Grid, Pos2, Rect,
+    RichText, Stroke, Ui, WidgetText, Window,
 };
 use nih_plug_egui::{create_egui_editor, egui, EguiState};
 use noise::{NoiseFn, OpenSimplex, Perlin};
@@ -35,6 +34,9 @@ use std::time::Duration;
 use self::utils::{begin_set, end_set, get_set, get_set_normalized};
 
 mod utils;
+
+const FREQ_RANGE_START_HZ: f32 = 20.0;
+const FREQ_RANGE_END_HZ: f32 = 15_000.0;
 
 fn knob<P, Text>(ui: &mut Ui, setter: &ParamSetter, param: &P, diameter: f32, description: Text)
 where
@@ -68,16 +70,18 @@ pub fn default_editor_state() -> Arc<EguiState> {
 }
 
 pub fn create(
-    state: Arc<EguiState>,
     params: Arc<ScaleColorizrParams>,
     displays: Arc<FrequencyDisplay>,
+    pre_spectrum: Arc<Mutex<SpectrumOutput>>,
+    post_spectrum: Arc<Mutex<SpectrumOutput>>,
+    sample_rate: Arc<AtomicF32>,
     midi_debug: Arc<AtomicCell<Option<NoteEvent<()>>>>,
     biquads: Arc<BiquadDisplay>,
 ) -> Option<Box<dyn Editor>> {
     let gradient = colorgrad::preset::rainbow();
 
     create_egui_editor(
-        state,
+        params.editor_state.clone(),
         EditorState::default(),
         |ctx, _| {
             cozy_ui::setup(ctx);
@@ -140,8 +144,21 @@ pub fn create(
                 egui::Frame::canvas(ui.style())
                     .stroke(Stroke::new(2.0, Color32::DARK_GRAY))
                     .show(ui, |ui| {
+                        let (_, rect) = ui.allocate_space(ui.available_size_before_wrap());
+
+                        draw_log_grid(ui, rect);
+
+                        draw_spectrum(ui, rect, &pre_spectrum, sample_rate.clone(), Color32::GRAY);
+                        draw_spectrum(
+                            ui,
+                            rect,
+                            &post_spectrum,
+                            sample_rate.clone(),
+                            cozy_ui::colors::HIGHLIGHT_COL32.gamma_multiply(ui.memory(|m| m.data.get_temp("active_amt".into()).unwrap_or(0.0))),
+                        );
+
                         let filter_line_stopwatch = Sw::new_started();
-                        filter_line(ui, &biquads, &gradient);
+                        draw_filter_line(ui, rect, &biquads, gradient.clone());
                         let draw_time = filter_line_stopwatch.elapsed();
                         ui.memory_mut(|memory| {
                             memory.data.insert_temp("filter_elapsed".into(), draw_time)
@@ -201,10 +218,7 @@ pub fn create(
                     ui.image(include_image!("../assets/Cozy_logo.png"));
                     ui.vertical_centered(|ui| {
                         ui.heading(RichText::new("SCALE COLORIZR").strong());
-                        ui.label(
-                            RichText::new(format!("Version {}", VERSION))
-                                .italics(),
-                        );
+                        ui.label(RichText::new(format!("Version {}", VERSION)).italics());
                         ui.hyperlink_to("Homepage", env!("CARGO_PKG_HOMEPAGE"));
                         ui.separator();
                         ui.heading(RichText::new("Credits"));
@@ -244,59 +258,10 @@ pub fn create(
     )
 }
 
-struct ColoredVertex {
-    position: Pos2,
-    color: Color32,
-}
-
-struct GradientVertex<'a, G: Gradient>(f64, &'a G, f32);
-
-impl<G: Gradient> StrokeVertexConstructor<ColoredVertex> for GradientVertex<'_, G> {
-    fn new_vertex(&mut self, vertex: lyon_tessellation::StrokeVertex) -> ColoredVertex {
-        static NOISE: Lazy<OpenSimplex> = Lazy::new(|| OpenSimplex::new(rand::random()));
-
-        let GradientVertex(animation_position, gradient, interpolate) = self;
-        let noise_value = norm(
-            NOISE.get([
-                vertex.position_on_path().x as f64 * 0.002,
-                *animation_position,
-            ]) as f32,
-            -0.5,
-            0.5,
-        );
-        let gradient = gradient.at(noise_value);
-
-        let color = Color::from_hsva(0.0, 0.0, noise_value, 1.0)
-            .interpolate_oklab(&gradient, *interpolate)
-            .to_rgba8();
-
-        ColoredVertex {
-            position: pos2(vertex.position().x, vertex.position().y),
-            color: Color32::from_rgb(color[0], color[1], color[2]),
-        }
-    }
-}
-
-fn filter_line<G: Gradient>(ui: &mut Ui, biquads: &Arc<BiquadDisplay>, gradient: &G) {
-    static ANIMATE_NOISE: Lazy<Perlin> = Lazy::new(|| Perlin::new(rand::random()));
-    let (_, rect) = ui.allocate_space(ui.available_size_before_wrap());
-
+fn draw_log_grid(ui: &Ui, rect: Rect) {
     let painter = ui.painter_at(rect);
-
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    let mut points = Vec::with_capacity(rect.width().round() as usize);
-    let mut sampled_frequencies = Vec::with_capacity(rect.width().round() as usize);
-
-    let active_biquads: Vec<BiquadCoefficients<_>> = biquads
-        .iter()
-        .flatten()
-        .filter_map(AtomicCell::load)
-        .collect();
-
-    let is_active = !active_biquads.is_empty();
-
-    let log_min = 20.0_f32.log10();
-    let log_max = 15_000_f32.log10();
+    let log_min = FREQ_RANGE_START_HZ.log10();
+    let log_max = FREQ_RANGE_END_HZ.log10();
 
     let mut previous = 10.0;
     for max in PowersOfTen::new(10.0, 20_000.0) {
@@ -335,6 +300,75 @@ fn filter_line<G: Gradient>(ui: &mut Ui, biquads: &Arc<BiquadDisplay>, gradient:
         }
         previous = max;
     }
+}
+
+fn draw_spectrum(
+    ui: &Ui,
+    rect: Rect,
+    spectrum: &Mutex<SpectrumOutput>,
+    sample_rate: Arc<AtomicF32>,
+    color: Color32,
+) {
+    let painter = ui.painter_at(rect);
+    let mut lock = spectrum.lock();
+    let spectrum_data = lock.read();
+    let nyquist = sample_rate.load(std::sync::atomic::Ordering::Relaxed) / 2.0;
+
+    let bin_freq = |bin_idx: f32| (bin_idx / spectrum_data.len() as f32) * nyquist;
+    let magnitude_height = |magnitude: f32| {
+        let magnitude_db = nih_plug::util::gain_to_db(magnitude);
+        (magnitude_db + 80.0) / 100.0
+    };
+    let bin_t = |bin_idx: f32| {
+        (bin_freq(bin_idx).log10() - FREQ_RANGE_START_HZ.log10())
+            / (FREQ_RANGE_END_HZ.log10() - FREQ_RANGE_START_HZ.log10())
+    };
+
+    let points: Vec<Pos2> = spectrum_data
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, magnitude)| {
+            let t = bin_t(idx as f32).max(0.0);
+
+            if t > 1.0 {
+                return None;
+            }
+
+            let x_coord = rect.lerp_inside(vec2(t, 0.0)).x;
+
+            let height = magnitude_height(*magnitude);
+
+            Some(pos2(x_coord, rect.top() + (rect.height() * (1.0 - height))))
+        })
+        .collect();
+
+    painter.add(PathShape::line(points, Stroke::new(1.5, color)));
+}
+
+fn draw_filter_line<G: Gradient + Sync + Send + 'static>(
+    ui: &mut Ui,
+    rect: Rect,
+    biquads: &Arc<BiquadDisplay>,
+    gradient: G,
+) {
+    static ANIMATE_NOISE: Lazy<Perlin> = Lazy::new(|| Perlin::new(rand::random()));
+
+    let painter = ui.painter_at(rect);
+
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let mut points = Vec::with_capacity(rect.width().round() as usize);
+    let mut sampled_frequencies = Vec::with_capacity(rect.width().round() as usize);
+
+    let active_biquads: Vec<BiquadCoefficients<_>> = biquads
+        .iter()
+        .flatten()
+        .filter_map(AtomicCell::load)
+        .collect();
+
+    let is_active = !active_biquads.is_empty();
+
+    let log_min = FREQ_RANGE_START_HZ.log10();
+    let log_max = FREQ_RANGE_END_HZ.log10();
 
     #[allow(clippy::cast_possible_truncation)]
     for i in rect.left() as i32..=rect.right() as i32 {
@@ -366,43 +400,31 @@ fn filter_line<G: Gradient>(ui: &mut Ui, biquads: &Arc<BiquadDisplay>, gradient:
     // but i couldn't get it to work, so i'm doing this terribleness instead.
     let animation_position = ui.ctx().frame_nr() as f64 * 0.005;
     let offset = ANIMATE_NOISE.get([animation_position * 0.01, 0.0]);
-    let mut path_builder = Path::builder();
-    let first = points.first().unwrap();
-    path_builder.begin(Point::new(first.x, first.y));
-    for point in points.iter().skip(1) {
-        path_builder.line_to(Point::new(point.x, point.y));
-    }
-    path_builder.end(false);
+    let interpolate = ui.ctx().animate_bool("active".into(), is_active);
+    ui.memory_mut(|m| m.data.insert_temp("active_amt".into(), interpolate));
 
-    let mut buffers: VertexBuffers<ColoredVertex, u32> = VertexBuffers::new();
-    let mut vertex_builder = BuffersBuilder::new(
-        &mut buffers,
-        GradientVertex(
-            animation_position + offset,
-            gradient,
-            ui.ctx().animate_bool("active".into(), is_active),
-        ),
-    );
-    let mut tessellator = StrokeTessellator::new();
+    painter.add(PathShape::line(
+        points,
+        PathStroke::new_uv(3.0, move |bounds, pos| {
+            static NOISE: Lazy<OpenSimplex> = Lazy::new(|| OpenSimplex::new(rand::random()));
 
-    tessellator
-        .tessellate_path(
-            &path_builder.build(),
-            &StrokeOptions::default()
-                .with_line_width(3.0)
-                .with_line_join(lyon_path::LineJoin::Round),
-            &mut vertex_builder,
-        )
-        .unwrap();
+            let noise_value = norm(
+                NOISE.get([
+                    remap_clamp(pos.x, bounds.x_range(), 0.0..=1.5) as f64,
+                    animation_position + offset,
+                ]) as f32,
+                -0.5,
+                0.5,
+            );
+            let gradient = gradient.at(noise_value);
 
-    let mut mesh = Mesh::default();
-    for ColoredVertex { position, color } in buffers.vertices {
-        mesh.colored_vertex(position, color)
-    }
+            let color = Color::from_hsva(0.0, 0.0, noise_value, 1.0)
+                .interpolate_oklab(&gradient, interpolate)
+                .to_rgba8();
 
-    mesh.indices = buffers.indices;
-
-    painter.add(mesh);
+            Color32::from_rgba_premultiplied(color[0], color[1], color[2], color[3])
+        }),
+    ));
 
     // for (idx, p) in points.array_windows().enumerate() {
     //     let x = idx as f64 * 0.002;

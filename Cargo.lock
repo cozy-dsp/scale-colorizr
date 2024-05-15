@@ -515,12 +515,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "color_quant"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d7b894f5411737b7867f4827955924d7c254fc9f4d91a6aad6b097804b1018b"
-
-[[package]]
 name = "colorchoice"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -640,7 +634,7 @@ dependencies = [
 [[package]]
 name = "cozy-ui"
 version = "0.1.0"
-source = "git+https://vcs.cozydsp.space/cozy-dsp/cozy-ui.git#83fb0be8e83a7645bfc7976adcd384541a71ec23"
+source = "git+https://vcs.cozydsp.space/cozy-dsp/cozy-ui.git?branch=egui-git#9854b61796a77de6ba7b70df6a6649122e263989"
 dependencies = [
  "colorgrad",
  "egui",
@@ -776,8 +770,7 @@ dependencies = [
 [[package]]
 name = "ecolor"
 version = "0.27.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20930a432bbd57a6d55e07976089708d4893f3d556cf42a0d79e9e321fa73b10"
+source = "git+https://github.com/emilk/egui?rev=c1eb3f884db8bc4f52dbae4f261619cee651f411#c1eb3f884db8bc4f52dbae4f261619cee651f411"
 dependencies = [
  "bytemuck",
  "serde",
@@ -786,11 +779,11 @@ dependencies = [
 [[package]]
 name = "egui"
 version = "0.27.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "584c5d1bf9a67b25778a3323af222dbe1a1feb532190e103901187f92c7fe29a"
+source = "git+https://github.com/emilk/egui?rev=c1eb3f884db8bc4f52dbae4f261619cee651f411#c1eb3f884db8bc4f52dbae4f261619cee651f411"
 dependencies = [
  "accesskit",
  "ahash",
+ "emath",
  "epaint",
  "nohash-hasher",
  "serde",
@@ -799,7 +792,7 @@ dependencies = [
 [[package]]
 name = "egui-baseview"
 version = "0.2.0"
-source = "git+https://github.com/BillyDM/egui-baseview.git?rev=68c4d0e8e5c1c702a888a245f4ac50eddfdfcaed#68c4d0e8e5c1c702a888a245f4ac50eddfdfcaed"
+source = "git+https://github.com/murl-digital/egui-baseview.git?rev=6cc6c8e4ad2e583f597a96f238cc7dc318f8c59a#6cc6c8e4ad2e583f597a96f238cc7dc318f8c59a"
 dependencies = [
  "baseview 0.1.0 (git+https://github.com/RustAudio/baseview.git?rev=45465c5f46abed6c6ce370fffde5edc8e4cd5aa3)",
  "copypasta",
@@ -813,8 +806,7 @@ dependencies = [
 [[package]]
 name = "egui_extras"
 version = "0.27.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b78779f35ded1a853786c9ce0b43fe1053e10a21ea3b23ebea411805ce41593"
+source = "git+https://github.com/emilk/egui?rev=c1eb3f884db8bc4f52dbae4f261619cee651f411#c1eb3f884db8bc4f52dbae4f261619cee651f411"
 dependencies = [
  "egui",
  "enum-map",
@@ -828,8 +820,7 @@ dependencies = [
 [[package]]
 name = "egui_glow"
 version = "0.27.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e0e5d975f3c86edc3d35b1db88bb27c15dde7c55d3b5af164968ab5ede3f44ca"
+source = "git+https://github.com/emilk/egui?rev=c1eb3f884db8bc4f52dbae4f261619cee651f411#c1eb3f884db8bc4f52dbae4f261619cee651f411"
 dependencies = [
  "bytemuck",
  "egui",
@@ -849,8 +840,7 @@ checksum = "a47c1c47d2f5964e29c61246e81db715514cd532db6b5116a25ea3c03d6780a2"
 [[package]]
 name = "emath"
 version = "0.27.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e4c3a552cfca14630702449d35f41c84a0d15963273771c6059175a803620f3f"
+source = "git+https://github.com/emilk/egui?rev=c1eb3f884db8bc4f52dbae4f261619cee651f411#c1eb3f884db8bc4f52dbae4f261619cee651f411"
 dependencies = [
  "bytemuck",
  "serde",
@@ -891,8 +881,7 @@ dependencies = [
 [[package]]
 name = "epaint"
 version = "0.27.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b381f8b149657a4acf837095351839f32cd5c4aec1817fc4df84e18d76334176"
+source = "git+https://github.com/emilk/egui?rev=c1eb3f884db8bc4f52dbae4f261619cee651f411#c1eb3f884db8bc4f52dbae4f261619cee651f411"
 dependencies = [
  "ab_glyph",
  "ahash",
@@ -921,15 +910,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "euclid"
-version = "0.22.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "87f253bc5c813ca05792837a0ff4b3a580336b224512d48f7eda1d7dd9210787"
-dependencies = [
- "num-traits",
-]
-
-[[package]]
 name = "fdeflate"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -953,12 +933,6 @@ name = "float-cmp"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "98de4bbd547a563b716d8dfa9aad1cb19bfab00f4fa09a6a4ed21dbcf44ce9c4"
-
-[[package]]
-name = "float_next_after"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8bf7cc16383c4b8d58b9905a8509f02926ce3058053c056376248d958c9df1e8"
 
 [[package]]
 name = "foreign-types"
@@ -1054,13 +1028,12 @@ dependencies = [
 
 [[package]]
 name = "image"
-version = "0.24.9"
+version = "0.25.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5690139d2f55868e080017335e4b94cb7414274c74f1669c84fb5feba2c9f69d"
+checksum = "fd54d660e773627692c524beaad361aca785a4f9f5730ce91f42aabe5bce3d11"
 dependencies = [
  "bytemuck",
  "byteorder",
- "color_quant",
  "num-traits",
  "png",
 ]
@@ -1232,12 +1205,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "libm"
-version = "0.2.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ec2a862134d2a7d32d7983ddcdd1c4923530833c9f2ea1a44fc5fa473989058"
-
-[[package]]
 name = "libsw"
 version = "3.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1264,38 +1231,6 @@ name = "log"
 version = "0.4.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "90ed8c1e510134f979dbc4f070f87d4313098b704861a105fe34231c70a3901c"
-
-[[package]]
-name = "lyon_geom"
-version = "1.0.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "edecfb8d234a2b0be031ab02ebcdd9f3b9ee418fb35e265f7a540a48d197bff9"
-dependencies = [
- "arrayvec",
- "euclid",
- "num-traits",
-]
-
-[[package]]
-name = "lyon_path"
-version = "1.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca507745ba7ccbc76e5c44e7b63b1a29d2b0d6126f375806a5bbaf657c7d6c45"
-dependencies = [
- "lyon_geom",
- "num-traits",
-]
-
-[[package]]
-name = "lyon_tessellation"
-version = "1.0.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4470bd0b1f29eda66068ab1fd47719facda0a136b829bcca69287ed0ac40a134"
-dependencies = [
- "float_next_after",
- "lyon_path",
- "num-traits",
-]
 
 [[package]]
 name = "mach2"
@@ -1439,7 +1374,7 @@ dependencies = [
 [[package]]
 name = "nih_plug"
 version = "0.0.0"
-source = "git+https://github.com/murl-digital/nih-plug.git?branch=feature/bump-dependencies#5eae7cac93111e8a077dfac308dd825e9d4648b7"
+source = "git+https://github.com/murl-digital/nih-plug.git?branch=egui-git#10ab7e8ee700dc07454c2f75fd2b1f982b71102d"
 dependencies = [
  "anyhow",
  "anymap",
@@ -1477,7 +1412,7 @@ dependencies = [
 [[package]]
 name = "nih_plug_derive"
 version = "0.1.0"
-source = "git+https://github.com/murl-digital/nih-plug.git?branch=feature/bump-dependencies#5eae7cac93111e8a077dfac308dd825e9d4648b7"
+source = "git+https://github.com/murl-digital/nih-plug.git?branch=egui-git#10ab7e8ee700dc07454c2f75fd2b1f982b71102d"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1487,7 +1422,7 @@ dependencies = [
 [[package]]
 name = "nih_plug_egui"
 version = "0.0.0"
-source = "git+https://github.com/murl-digital/nih-plug.git?branch=feature/bump-dependencies#5eae7cac93111e8a077dfac308dd825e9d4648b7"
+source = "git+https://github.com/murl-digital/nih-plug.git?branch=egui-git#10ab7e8ee700dc07454c2f75fd2b1f982b71102d"
 dependencies = [
  "baseview 0.1.0 (git+https://github.com/RustAudio/baseview.git?rev=45465c5f46abed6c6ce370fffde5edc8e4cd5aa3)",
  "crossbeam",
@@ -1590,13 +1525,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "num-integer"
+version = "0.1.46"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7969661fd2958a5cb096e56c8e1ad0444ac2bbcd0061bd28660485a44879858f"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
 name = "num-traits"
 version = "0.2.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
 dependencies = [
  "autocfg",
- "libm",
 ]
 
 [[package]]
@@ -1817,6 +1760,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b40af805b3121feab8a3c29f04d8ad262fa8e0561883e7653e024ae4479e6de"
 
 [[package]]
+name = "primal-check"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9df7f93fd637f083201473dab4fee2db4c429d32e55e3299980ab3957ab916a0"
+dependencies = [
+ "num-integer",
+]
+
+[[package]]
 name = "proc-macro-crate"
 version = "3.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1889,30 +1841,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2ff9a1f06a88b01621b7ae906ef0211290d1c8a168a15542486a8f61c0833b9"
 
 [[package]]
-name = "rayon"
-version = "1.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b418a60154510ca1a002a752ca9714984e21e4241e804d32555251faf8b78ffa"
-dependencies = [
- "either",
- "rayon-core",
-]
-
-[[package]]
-name = "rayon-core"
-version = "1.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1465873a3dfdaa8ae7cb14b4383657caab0b3e8a0aa9ae8e04b044854c8dfce2"
-dependencies = [
- "crossbeam-deque",
- "crossbeam-utils",
-]
-
-[[package]]
 name = "rctree"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3b42e27ef78c35d3998403c1d26f3efd9e135d3e5121b0a4845cc5cc27547f4f"
+
+[[package]]
+name = "realfft"
+version = "3.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "953d9f7e5cdd80963547b456251296efc2626ed4e3cbf36c869d9564e0220571"
+dependencies = [
+ "rustfft",
+]
 
 [[package]]
 name = "redox_syscall"
@@ -2012,6 +1953,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "08d43f7aa6b08d49f382cde6a7982047c3426db949b1424bc4b7ec9ae12c6ce2"
 
 [[package]]
+name = "rustfft"
+version = "6.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "43806561bc506d0c5d160643ad742e3161049ac01027b5e6d7524091fd401d86"
+dependencies = [
+ "num-complex",
+ "num-integer",
+ "num-traits",
+ "primal-check",
+ "strength_reduce",
+ "transpose",
+ "version_check",
+]
+
+[[package]]
 name = "rustix"
 version = "0.38.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2057,16 +2013,15 @@ dependencies = [
  "egui_extras",
  "image",
  "libsw",
- "lyon_path",
- "lyon_tessellation",
  "nih_plug",
  "nih_plug_egui",
  "noise",
  "num-complex",
  "once_cell",
  "rand",
- "rayon",
+ "realfft",
  "serde",
+ "triple_buffer",
  "vergen",
 ]
 
@@ -2186,6 +2141,12 @@ name = "smallvec"
 version = "1.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3c5e1a9a646d36c3599cd173a41282daf47c44583ad367b8e6837255952e5c67"
+
+[[package]]
+name = "strength_reduce"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fe895eb47f22e2ddd4dabc02bce419d2e643c8e3b585c78158b349195bc24d82"
 
 [[package]]
 name = "strict-num"
@@ -2375,6 +2336,25 @@ dependencies = [
  "indexmap",
  "toml_datetime",
  "winnow",
+]
+
+[[package]]
+name = "transpose"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1ad61aed86bc3faea4300c7aee358b4c6d0c8d6ccc36524c96e4c92ccf26e77e"
+dependencies = [
+ "num-integer",
+ "strength_reduce",
+]
+
+[[package]]
+name = "triple_buffer"
+version = "7.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "316e1ab00252ce5980b8a70eb50f9818f47a20d341394c56ffab88e764b3caed"
+dependencies = [
+ "crossbeam-utils",
 ]
 
 [[package]]

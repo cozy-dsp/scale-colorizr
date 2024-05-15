@@ -1,11 +1,15 @@
 #![feature(portable_simd)]
 #![feature(array_windows)]
+
 mod editor;
+mod spectrum;
 
 use cozy_util::filter::{Biquad, BiquadCoefficients};
 use crossbeam::atomic::AtomicCell;
 use nih_plug::prelude::*;
+use nih_plug_egui::egui::mutex::Mutex;
 use nih_plug_egui::EguiState;
+use spectrum::{SpectrumInput, SpectrumOutput};
 use std::simd::f32x2;
 use std::sync::Arc;
 
@@ -14,8 +18,7 @@ pub const NUM_VOICES: usize = 128;
 pub const NUM_FILTERS: usize = 8;
 
 pub type FrequencyDisplay = [[AtomicCell<Option<f32>>; NUM_FILTERS]; NUM_VOICES];
-pub type BiquadDisplay =
-    [[AtomicCell<Option<BiquadCoefficients<f32x2>>>; NUM_FILTERS]; NUM_VOICES];
+pub type BiquadDisplay = [[AtomicCell<Option<BiquadCoefficients<f32x2>>>; NUM_FILTERS]; NUM_VOICES];
 
 pub const VERSION: &str = env!("VERGEN_GIT_DESCRIBE");
 
@@ -41,6 +44,10 @@ pub struct ScaleColorizr {
     sample_rate: Arc<AtomicF32>,
     midi_event_debug: Arc<AtomicCell<Option<NoteEvent<()>>>>,
     next_internal_voice_id: u64,
+    pre_spectrum_input: SpectrumInput,
+    pre_spectrum_output: Arc<Mutex<SpectrumOutput>>,
+    post_spectrum_input: SpectrumInput,
+    post_spectrum_output: Arc<Mutex<SpectrumOutput>>,
 }
 
 #[derive(Params)]
@@ -64,6 +71,9 @@ struct ScaleColorizrParams {
 
 impl Default for ScaleColorizr {
     fn default() -> Self {
+        let (pre_spectrum_input, pre_spectrum_output) = SpectrumInput::new(2);
+        let (post_spectrum_input, post_spectrum_output) = SpectrumInput::new(2);
+
         Self {
             params: Arc::new(ScaleColorizrParams::default()),
             // TODO: this feels dumb
@@ -78,6 +88,10 @@ impl Default for ScaleColorizr {
             sample_rate: Arc::new(AtomicF32::new(1.0)),
             midi_event_debug: Arc::new(AtomicCell::new(None)),
             next_internal_voice_id: 0,
+            pre_spectrum_input,
+            pre_spectrum_output: Arc::new(Mutex::new(pre_spectrum_output)),
+            post_spectrum_input,
+            post_spectrum_output: Arc::new(Mutex::new(post_spectrum_output)),
         }
     }
 }
@@ -171,9 +185,11 @@ impl Plugin for ScaleColorizr {
 
     fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
         editor::create(
-            self.params.editor_state.clone(),
             self.params.clone(),
             self.frequency_display.clone(),
+            self.pre_spectrum_output.clone(),
+            self.post_spectrum_output.clone(),
+            self.sample_rate.clone(),
             self.midi_event_debug.clone(),
             self.biquad_display.clone(),
         )
@@ -189,6 +205,12 @@ impl Plugin for ScaleColorizr {
             buffer_config.sample_rate,
             std::sync::atomic::Ordering::Relaxed,
         );
+
+        self.pre_spectrum_input
+            .update_sample_rate(buffer_config.sample_rate);
+        self.post_spectrum_input
+            .update_sample_rate(buffer_config.sample_rate);
+
         true
     }
 
@@ -211,6 +233,11 @@ impl Plugin for ScaleColorizr {
         // num_remaining_samples, next_event_idx - block_start_idx)`. Because blocks also need to be
         // split on note events, it's easier to work with raw audio here and to do the splitting by
         // hand.
+
+        if self.params.editor_state.is_open() {
+            self.pre_spectrum_input.compute(buffer);
+        }
+
         let num_samples = buffer.samples();
         let sample_rate = self.sample_rate.load(std::sync::atomic::Ordering::Relaxed);
         let output = buffer.as_slice();
@@ -400,6 +427,8 @@ impl Plugin for ScaleColorizr {
                     }
                 }
             }
+
+            self.post_spectrum_input.compute(buffer);
         }
 
         ProcessStatus::Normal

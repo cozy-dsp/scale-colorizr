@@ -19,8 +19,7 @@ use nih_plug::prelude::Editor;
 use nih_plug_egui::egui::epaint::{PathShape, PathStroke};
 use nih_plug_egui::egui::mutex::Mutex;
 use nih_plug_egui::egui::{
-    include_image, pos2, remap_clamp, vec2, Align2, Color32, DragValue, FontId, Grid, Pos2, Rect,
-    RichText, Stroke, Ui, WidgetText, Window,
+    include_image, pos2, remap, remap_clamp, vec2, Align2, Color32, DragValue, FontData, FontDefinitions, FontId, Grid, Pos2, Rect, RichText, Stroke, Ui, WidgetText, Window
 };
 use nih_plug_egui::{create_egui_editor, egui, EguiState};
 use noise::{NoiseFn, OpenSimplex, Perlin};
@@ -86,6 +85,20 @@ pub fn create(
         |ctx, _| {
             cozy_ui::setup(ctx);
             egui_extras::install_image_loaders(ctx);
+
+            let mut fonts = FontDefinitions::default();
+
+            fonts.font_data.insert(
+                "0x".to_string(),
+                FontData::from_static(include_bytes!("../assets/0xProto-Regular.ttf")),
+            );
+
+            fonts
+                .families
+                .entry(nih_plug_egui::egui::FontFamily::Name("0x".into()))
+                .or_default()
+                .insert(0, "0x".to_string());
+            ctx.set_fonts(fonts);
         },
         move |ctx, setter, state| {
             egui::TopBottomPanel::top("menu").show(ctx, |ui| {
@@ -148,7 +161,7 @@ pub fn create(
 
                         draw_log_grid(ui, rect);
 
-                        draw_spectrum(ui, rect, &pre_spectrum, sample_rate.clone(), Color32::GRAY);
+                        draw_spectrum(ui, rect, &pre_spectrum, sample_rate.clone(), Color32::GRAY.gamma_multiply(remap(ui.ctx().animate_bool("delta_active".into(), !params.delta.modulated_plain_value()), 0.0..=1.0, 0.25..=1.0)));
                         draw_spectrum(
                             ui,
                             rect,
@@ -287,7 +300,7 @@ fn draw_log_grid(ui: &Ui, rect: Rect) {
                     } else {
                         format!("{freq:.0}")
                     },
-                    FontId::monospace(10.0),
+                    FontId::new(10.0, egui::FontFamily::Name("0x".into())),
                     Color32::DARK_GRAY,
                 );
             }

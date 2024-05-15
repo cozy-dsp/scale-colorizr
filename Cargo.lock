@@ -645,7 +645,7 @@ dependencies = [
 [[package]]
 name = "cozy-util"
 version = "0.1.0"
-source = "git+https://github.com/cozy-dsp/cozy-util.git#bff6f215c88f6dddd452ed459b9859b13bbbe99d"
+source = "git+https://vcs.cozydsp.space/cozy-dsp/cozy-util.git#bff6f215c88f6dddd452ed459b9859b13bbbe99d"
 dependencies = [
  "num-complex",
 ]

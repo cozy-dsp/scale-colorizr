@@ -50,6 +50,12 @@ pub struct ScaleColorizr {
     post_spectrum_output: Arc<Mutex<SpectrumOutput>>,
 }
 
+#[derive(Enum, PartialEq)]
+enum FilterMode {
+    Peaking,
+    Notch
+}
+
 #[derive(Params)]
 struct ScaleColorizrParams {
     #[persist = "editor-state"]
@@ -67,6 +73,8 @@ struct ScaleColorizrParams {
     pub safety_switch: BoolParam,
     #[id = "voice-count"]
     pub voice_count: IntParam,
+    #[id = "filter-mod"]
+    pub filter_mode: EnumParam<FilterMode>
 }
 
 impl Default for ScaleColorizr {
@@ -138,6 +146,7 @@ impl Default for ScaleColorizrParams {
                     max: NUM_VOICES as i32,
                 },
             ),
+            filter_mode: EnumParam::new("Filter Mode", FilterMode::Peaking)
         }
     }
 }
@@ -353,12 +362,15 @@ impl Plugin for ScaleColorizr {
                         let adjusted_frequency = (frequency - voice.frequency)
                             / (voice.frequency * (NUM_FILTERS / 2) as f32);
                         let amp_falloff = (-adjusted_frequency).exp();
-                        filter.coefficients = BiquadCoefficients::peaking_eq(
-                            sample_rate,
-                            frequency,
-                            amp * amp_falloff,
-                            40.0,
-                        );
+                        filter.coefficients = match self.params.filter_mode.value() {
+                            FilterMode::Peaking => BiquadCoefficients::peaking_eq(
+                                sample_rate,
+                                frequency,
+                                amp * amp_falloff,
+                                40.0,
+                            ),
+                            FilterMode::Notch => BiquadCoefficients::notch(sample_rate, frequency, 0.25),
+                        };
                         sample = filter.process(sample);
                     }
 

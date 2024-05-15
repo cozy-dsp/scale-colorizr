@@ -6,6 +6,7 @@ use crate::spectrum::SpectrumOutput;
 use crate::{BiquadDisplay, FrequencyDisplay, ScaleColorizrParams, VERSION};
 use colorgrad::{Color, Gradient};
 use cozy_ui::centered;
+use cozy_ui::colors::HIGHLIGHT_COL32;
 use cozy_ui::widgets::button::toggle;
 use cozy_ui::widgets::Knob;
 use cozy_util::filter::BiquadCoefficients;
@@ -13,13 +14,14 @@ use crossbeam::atomic::AtomicCell;
 use libsw::Sw;
 use nih_plug::context::gui::ParamSetter;
 use nih_plug::midi::NoteEvent;
+use nih_plug::params::enums::Enum;
 use nih_plug::params::smoothing::AtomicF32;
-use nih_plug::params::Param;
+use nih_plug::params::{EnumParam, Param};
 use nih_plug::prelude::Editor;
 use nih_plug_egui::egui::epaint::{PathShape, PathStroke};
 use nih_plug_egui::egui::mutex::Mutex;
 use nih_plug_egui::egui::{
-    include_image, pos2, remap, remap_clamp, vec2, Align2, Color32, DragValue, FontData, FontDefinitions, FontId, Grid, Pos2, Rect, RichText, Stroke, Ui, WidgetText, Window
+    include_image, pos2, remap, remap_clamp, vec2, Align2, Color32, DragValue, FontData, FontDefinitions, FontId, Frame, Grid, Margin, Pos2, Rect, RichText, Rounding, Sense, Stroke, Ui, WidgetText, Window
 };
 use nih_plug_egui::{create_egui_editor, egui, EguiState};
 use noise::{NoiseFn, OpenSimplex, Perlin};
@@ -149,6 +151,8 @@ pub fn create(
                             50.0,
                             "The release for the filter envelope",
                         );
+
+                        switch(ui, &params.filter_mode, setter);
                     });
                 })
             });
@@ -400,7 +404,7 @@ fn draw_filter_line<G: Gradient + Sync + Send + 'static>(
 
         points.push(Pos2::new(
             x,
-            result.norm().log10().mul_add(-50.0, rect.center().y),
+            remap((result.norm().log10() * 0.05 + 0.5).max(0.0), 0.0..=1.0, rect.bottom_up_range()),
         ));
     }
 
@@ -421,13 +425,13 @@ fn draw_filter_line<G: Gradient + Sync + Send + 'static>(
         PathStroke::new_uv(3.0, move |bounds, pos| {
             static NOISE: Lazy<OpenSimplex> = Lazy::new(|| OpenSimplex::new(rand::random()));
 
-            let noise_value = norm(
+            let noise_value = remap(
                 NOISE.get([
                     remap_clamp(pos.x, bounds.x_range(), 0.0..=1.5) as f64,
                     animation_position + offset,
                 ]) as f32,
-                -0.5,
-                0.5,
+                -0.5..=0.5,
+                0.0..=1.0,
             );
             let gradient = gradient.at(noise_value);
 
@@ -438,25 +442,27 @@ fn draw_filter_line<G: Gradient + Sync + Send + 'static>(
             Color32::from_rgba_premultiplied(color[0], color[1], color[2], color[3])
         }),
     ));
-
-    // for (idx, p) in points.array_windows().enumerate() {
-    //     let x = idx as f64 * 0.002;
-    //     let noise_value = norm(
-    //         NOISE.get([x, animation_position + offset]) as f32,
-    //         -0.5,
-    //         0.5,
-    //     );
-    //     let gradient = gradient.at(noise_value);
-    //     let color = Color::from_hsva(0.0, 0.0, noise_value, 1.0)
-    //         .interpolate_oklab(&gradient, ui.ctx().animate_bool("active".into(), is_active))
-    //         .to_rgba8();
-    //     painter.line_segment(
-    //         *p,
-    //         Stroke::new(1.5, Color32::from_rgb(color[0], color[1], color[2])),
-    //     );
-    // }
 }
 
-fn norm(t: f32, a: f32, b: f32) -> f32 {
-    (t - a) * (1.0 / (b - a))
+fn switch<T: Enum + PartialEq>(ui: &mut Ui, param: &EnumParam<T>, setter: &ParamSetter) {
+    ui.horizontal(|ui| {
+        Frame::default().rounding(Rounding::same(5.0)).fill(Color32::DARK_GRAY).inner_margin(Margin::same(4.0)).show(ui, |ui| {
+            for variant in T::variants() {
+                let galley = WidgetText::from(*variant).into_galley(ui, None, 50.0, FontId::new(10.0, egui::FontFamily::Name("0x".into())));
+
+                let (rect, response) = ui.allocate_exact_size(galley.rect.size(), Sense::click());
+                let response = response.on_hover_cursor(egui::CursorIcon::Grab);
+                ui.painter_at(rect).galley(pos2(
+                    rect.center().x - galley.size().x / 2.0,
+                    0.5f32.mul_add(-galley.size().y, rect.center().y),
+                ), galley, if param.modulated_normalized_value() == param.string_to_normalized_value(variant).unwrap() { HIGHLIGHT_COL32 } else { Color32::WHITE });
+
+                if response.clicked() {
+                    setter.begin_set_parameter(param);
+                    setter.set_parameter_normalized(param, param.string_to_normalized_value(variant).unwrap());
+                    setter.end_set_parameter(param);
+                }
+            }
+        });
+    });
 }

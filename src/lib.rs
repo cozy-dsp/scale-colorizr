@@ -126,7 +126,8 @@ impl Default for ScaleColorizrParams {
                     max: 2000.0,
                 },
             )
-            .with_unit(" ms"),
+            .with_unit(" ms")
+            .with_step_size(0.1),
             release: FloatParam::new(
                 "Release",
                 10.0,
@@ -135,7 +136,8 @@ impl Default for ScaleColorizrParams {
                     max: 2000.0,
                 },
             )
-            .with_unit(" ms"),
+            .with_unit(" ms")
+            .with_step_size(0.1),
             delta: BoolParam::new("Delta", false),
             safety_switch: BoolParam::new("SAFETY SWITCH", true).hide(),
             voice_count: IntParam::new(

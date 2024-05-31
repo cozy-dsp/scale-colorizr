@@ -21,7 +21,7 @@ use nih_plug::prelude::Editor;
 use nih_plug_egui::egui::epaint::{PathShape, PathStroke};
 use nih_plug_egui::egui::mutex::Mutex;
 use nih_plug_egui::egui::{
-    include_image, pos2, remap, remap_clamp, vec2, Align2, Color32, DragValue, FontData, FontDefinitions, FontId, Frame, Grid, Margin, Pos2, Rect, RichText, Rounding, Sense, Stroke, Ui, WidgetText, Window
+    include_image, pos2, remap, remap_clamp, vec2, Align2, Color32, DragValue, FontData, FontDefinitions, FontId, Frame, Grid, Margin, Mesh, Pos2, Rect, RichText, Rounding, Sense, Stroke, Ui, WidgetText, Window
 };
 use nih_plug_egui::{create_egui_editor, egui, EguiState};
 use noise::{NoiseFn, OpenSimplex, Perlin};
@@ -358,6 +358,26 @@ fn draw_spectrum(
             Some(pos2(x_coord, rect.top() + (rect.height() * (1.0 - height))))
         })
         .collect();
+
+    let color_bg = color.gamma_multiply(0.25);
+
+    for [left, right] in points.array_windows() {
+        let mut mesh = Mesh::default();
+        mesh.colored_vertex(*left, color_bg);
+        mesh.colored_vertex(*right, color_bg);
+
+        let bottom_left = pos2(left.x, rect.bottom());
+        let bottom_right = pos2(right.x, rect.bottom());
+
+        mesh.colored_vertex(bottom_right, color_bg);
+        mesh.colored_vertex(bottom_left, color_bg);
+
+        mesh.add_triangle(0, 1, 2);
+        mesh.add_triangle(3, 2, 0);
+
+
+        painter.add(mesh);
+    }
 
     painter.add(PathShape::line(points, Stroke::new(1.5, color)));
 }

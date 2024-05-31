@@ -468,7 +468,7 @@ fn switch<T: Enum + PartialEq>(ui: &mut Ui, param: &EnumParam<T>, setter: &Param
     ui.horizontal(|ui| {
         Frame::default().rounding(Rounding::same(5.0)).fill(Color32::DARK_GRAY).inner_margin(Margin::same(4.0)).show(ui, |ui| {
             for variant in T::variants() {
-                let galley = WidgetText::from(*variant).into_galley(ui, None, 50.0, FontId::new(10.0, egui::FontFamily::Name("0x".into())));
+                let galley = WidgetText::from(variant.to_uppercase()).into_galley(ui, None, 50.0, FontId::new(10.0, egui::FontFamily::Name("0x".into())));
 
                 let (rect, response) = ui.allocate_exact_size(galley.rect.size(), Sense::click());
                 let response = response.on_hover_cursor(egui::CursorIcon::Grab);

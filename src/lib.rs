@@ -52,7 +52,7 @@ pub struct ScaleColorizr {
 
 #[derive(Enum, PartialEq)]
 enum FilterMode {
-    Peaking,
+    Peak,
     Notch
 }
 
@@ -148,7 +148,7 @@ impl Default for ScaleColorizrParams {
                     max: NUM_VOICES as i32,
                 },
             ),
-            filter_mode: EnumParam::new("Filter Mode", FilterMode::Peaking)
+            filter_mode: EnumParam::new("Filter Mode", FilterMode::Peak)
         }
     }
 }
@@ -365,7 +365,7 @@ impl Plugin for ScaleColorizr {
                             / (voice.frequency * (NUM_FILTERS / 2) as f32);
                         let amp_falloff = (-adjusted_frequency).exp();
                         filter.coefficients = match self.params.filter_mode.value() {
-                            FilterMode::Peaking => BiquadCoefficients::peaking_eq(
+                            FilterMode::Peak => BiquadCoefficients::peaking_eq(
                                 sample_rate,
                                 frequency,
                                 amp * amp_falloff,

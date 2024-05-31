@@ -114,7 +114,7 @@ pub fn create(
                     ui.add(
                         toggle(
                             "delta",
-                            &params.delta.name().to_ascii_uppercase(),
+                            params.delta.name().to_ascii_uppercase(),
                             get_set(&params.delta, setter),
                             begin_set(&params.delta, setter),
                             end_set(&params.delta, setter),

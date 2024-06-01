@@ -23,19 +23,23 @@ editor = ["nih_plug/standalone"]
 crossbeam = "0.8.4"
 colorgrad = { git = "https://github.com/mazznoer/colorgrad-rs.git" }
 cozy-util = { git = "https://vcs.cozydsp.space/cozy-dsp/cozy-util.git", version = "0.1.0" }
-nih_plug = { git = "https://github.com/murl-digital/nih-plug.git", branch = "egui-git", features = ["assert_process_allocs", "simd"] }
-nih_plug_egui = { git = "https://github.com/murl-digital/nih-plug.git", branch = "egui-git" }
+nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git", features = ["assert_process_allocs", "simd"] }
+nih_plug_egui = { git = "https://github.com/robbert-vdh/nih-plug.git"}
 noise = "0.9"
 num-complex = "0.4.5"
 rand = "0.8.5"
 serde = { version = "1.0.197", features = ["derive"] }
 once_cell = { version = "1.19.0", features = ["parking_lot"] }
 libsw = "3.3"
-cozy-ui = { git = "https://vcs.cozydsp.space/cozy-dsp/cozy-ui.git", branch = "egui-git", version = "0.1.0" }
-egui_extras = { git = "https://github.com/emilk/egui", rev = "c1eb3f884db8bc4f52dbae4f261619cee651f411", features = ["image"] }
+cozy-ui = { git = "https://vcs.cozydsp.space/cozy-dsp/cozy-ui.git", version = "0.1.0" }
+egui_extras = { version = "0.27", features = ["image"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 realfft = "3.3.0"
 triple_buffer = "7.0.0"
+
+[patch.crates-io]
+egui = { git = "https://github.com/emilk/egui.git", rev = "c8578c9a6b78ff4b37b86f23264fbf78d826365c" }
+egui_extras = { git = "https://github.com/emilk/egui.git", rev = "c8578c9a6b78ff4b37b86f23264fbf78d826365c" }
 
 [build-dependencies]
 anyhow = "1.0.81"

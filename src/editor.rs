@@ -21,7 +21,7 @@ use nih_plug::prelude::Editor;
 use nih_plug_egui::egui::epaint::{PathShape, PathStroke};
 use nih_plug_egui::egui::mutex::Mutex;
 use nih_plug_egui::egui::{
-    include_image, pos2, remap, remap_clamp, vec2, Align2, Color32, DragValue, FontData, FontDefinitions, FontId, Frame, Grid, Margin, Mesh, Pos2, Rect, RichText, Rounding, Sense, Stroke, Ui, WidgetText, Window
+    include_image, pos2, remap, remap_clamp, vec2, Align2, Color32, DragValue, FontData, FontDefinitions, FontId, Frame, Grid, Layout, Margin, Mesh, Pos2, Rect, RichText, Rounding, Sense, Stroke, Ui, WidgetText, Window
 };
 use nih_plug_egui::{create_egui_editor, egui, EguiState};
 use noise::{NoiseFn, OpenSimplex, Perlin};
@@ -124,7 +124,11 @@ pub fn create(
                         ),
                     );
                     state.show_settings |= ui.button("SETTINGS").clicked();
-                })
+
+                    ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
+                        switch(ui, &params.filter_mode, setter);
+                    })
+                });
             });
 
             egui::TopBottomPanel::bottom("controls").show(ctx, |ui| {
@@ -151,8 +155,6 @@ pub fn create(
                             50.0,
                             "The release for the filter envelope",
                         );
-
-                        switch(ui, &params.filter_mode, setter);
                     });
                 })
             });
@@ -467,7 +469,7 @@ fn draw_filter_line<G: Gradient + Sync + Send + 'static>(
 fn switch<T: Enum + PartialEq>(ui: &mut Ui, param: &EnumParam<T>, setter: &ParamSetter) {
     ui.horizontal(|ui| {
         Frame::default().rounding(Rounding::same(5.0)).fill(Color32::DARK_GRAY).inner_margin(Margin::same(4.0)).show(ui, |ui| {
-            for variant in T::variants() {
+            for variant in T::variants().iter().rev() {
                 let galley = WidgetText::from(variant.to_uppercase()).into_galley(ui, None, 50.0, FontId::new(10.0, egui::FontFamily::Name("0x".into())));
 
                 let (rect, response) = ui.allocate_exact_size(galley.rect.size(), Sense::click());

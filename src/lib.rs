@@ -1,5 +1,6 @@
 #![feature(portable_simd)]
 #![feature(array_windows)]
+#![feature(fs_try_exists)]
 
 mod editor;
 mod spectrum;

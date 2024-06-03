@@ -36,6 +36,9 @@ egui_extras = { version = "0.27", features = ["image"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 realfft = "3.3.0"
 triple_buffer = "7.0.0"
+directories = "5.0.1"
+toml = "0.8.14"
+strum_macros = "0.26.3"
 
 [patch.crates-io]
 egui = { git = "https://github.com/emilk/egui.git", rev = "c8578c9a6b78ff4b37b86f23264fbf78d826365c" }

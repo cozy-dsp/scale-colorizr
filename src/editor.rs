@@ -4,13 +4,14 @@
 use crate::editor::utils::PowersOfTen;
 use crate::spectrum::SpectrumOutput;
 use crate::{FilterDisplay, FrequencyDisplay, ScaleColorizrParams, VERSION};
-use colorgrad::{Color, Gradient};
+use colorgrad::{CatmullRomGradient, Color, Gradient};
 use cozy_ui::centered;
 use cozy_ui::colors::HIGHLIGHT_COL32;
 use cozy_ui::widgets::button::toggle;
 use cozy_ui::widgets::Knob;
 use cozy_util::svf::SVF;
 use crossbeam::atomic::AtomicCell;
+use directories::ProjectDirs;
 use libsw::Sw;
 use nih_plug::context::gui::ParamSetter;
 use nih_plug::midi::NoteEvent;
@@ -28,7 +29,10 @@ use noise::{NoiseFn, OpenSimplex, Perlin};
 use num_complex::Complex32;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
+use strum_macros::Display;
+use std::fs;
 use std::f32::consts::E;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -59,11 +63,28 @@ where
     );
 }
 
-#[derive(Default, Serialize, Deserialize)]
+static CONFIG_DIR: Lazy<PathBuf> = Lazy::new(|| ProjectDirs::from("space", "cozy dsp", "Scale Colorizr").map(|d| d.config_dir().to_path_buf()).expect("no home directory is set"));
+
+#[derive(Default)]
 struct EditorState {
     show_debug: bool,
     show_about: bool,
     show_settings: bool,
+    config_io_error: Option<String>,
+    options: EditorOptions
+}
+
+#[derive(Default, Deserialize, Serialize, Display, PartialEq)]
+enum GradientType {
+    #[default]
+    Rainbow,
+    Custom
+}
+
+#[derive(Default, Deserialize, Serialize)]
+struct EditorOptions {
+    gradient_type: GradientType,
+    gradient_colors: Vec<[u8; 3]>,
 }
 
 pub fn default_editor_state() -> Arc<EguiState> {
@@ -79,12 +100,11 @@ pub fn create(
     midi_debug: Arc<AtomicCell<Option<NoteEvent<()>>>>,
     biquads: Arc<FilterDisplay>,
 ) -> Option<Box<dyn Editor>> {
-    let gradient = colorgrad::preset::rainbow();
 
     create_egui_editor(
         params.editor_state.clone(),
         EditorState::default(),
-        |ctx, _| {
+        |ctx, state| {
             cozy_ui::setup(ctx);
             egui_extras::install_image_loaders(ctx);
 
@@ -100,6 +120,35 @@ pub fn create(
                 .entry(nih_plug_egui::egui::FontFamily::Name("0x".into()))
                 .or_default()
                 .insert(0, "0x".to_string());
+
+            if let Err(e) = std::fs::create_dir_all(CONFIG_DIR.as_path()) {
+                state.config_io_error = Some(format!("{e:?}"));
+            } else {
+                match std::fs::try_exists(CONFIG_DIR.join("editor.toml")) {
+                    Ok(true) => {
+                        match std::fs::read_to_string(CONFIG_DIR.join("editor.toml")) {
+                            Ok(file) => {
+                                match toml::from_str(&file) {
+                                    Ok(options) => state.options = options,
+                                    Err(e) => state.config_io_error = Some(format!("Invalid config - {e:?}"))
+                                }
+                            },
+                            Err(e) => {
+                                state.config_io_error = Some(format!("Can't read config - {e:?}"));
+                            }
+                        }
+                    },
+                    Ok(false) => {
+                        if let Err(e) = fs::write(CONFIG_DIR.join("editor.toml"), toml::to_string_pretty(&EditorOptions::default()).unwrap()) {
+                            state.config_io_error = Some(format!("Couldn't write default config - {e:?}"));
+                        }
+                    }
+                    Err(e) => {
+                        state.config_io_error = Some(format!("Can't read config - {e:?}"))
+                    }
+                }
+            }
+
             ctx.set_fonts(fonts);
         },
         move |ctx, setter, state| {
@@ -127,6 +176,9 @@ pub fn create(
 
                     ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
                         switch(ui, &params.filter_mode, setter);
+                        if let Some(error) = &state.config_io_error {
+                            ui.label(RichText::new("⚠").color(Color32::GOLD)).on_hover_text(error);
+                        }
                     })
                 });
             });
@@ -177,7 +229,10 @@ pub fn create(
                         );
 
                         let filter_line_stopwatch = Sw::new_started();
-                        draw_filter_line(ui, rect, &biquads, gradient.clone());
+                        match state.options.gradient_type {
+                            GradientType::Rainbow => draw_filter_line(ui, rect, &biquads, colorgrad::preset::rainbow()),
+                            GradientType::Custom => draw_filter_line(ui, rect, &biquads, colorgrad::GradientBuilder::new().colors(&state.options.gradient_colors.iter().map(|[r, g, b]| Color::from_rgba8(*r, *g, *b, 255)).collect::<Vec<Color>>()).mode(colorgrad::BlendMode::Oklab).build::<CatmullRomGradient>().unwrap()),
+                        };
                         let draw_time = filter_line_stopwatch.elapsed();
                         ui.memory_mut(|memory| {
                             memory.data.insert_temp("filter_elapsed".into(), draw_time)
@@ -272,6 +327,23 @@ pub fn create(
                     ui.label(RichText::new("This allows the filters to go above the nyquist frequency."));
                     ui.label(RichText::new("⚠ DO NOT TURN THIS OFF UNLESS YOU KNOW WHAT YOU ARE DOING. THIS WILL BLOW YOUR HEAD OFF ⚠").color(Color32::RED).strong());
                     ui.add(toggle("safety_switch", "SAFETY SWITCH", get_set(&params.safety_switch, setter), begin_set(&params.safety_switch, setter), end_set(&params.safety_switch, setter)));
+                    ui.separator();
+                    ui.heading("Gradient Editor");
+                    let mut options_edited = state.options.gradient_colors.iter_mut().map(|color| ui.color_edit_button_srgb(color)).any(|r| r.changed());
+                    options_edited |= egui::ComboBox::from_label("Gradient Type").selected_text(state.options.gradient_type.to_string()).show_ui(ui, |ui| {
+                        ui.selectable_value(&mut state.options.gradient_type, GradientType::Rainbow, GradientType::Rainbow.to_string()).changed() ||
+                        ui.selectable_value(&mut state.options.gradient_type, GradientType::Custom, GradientType::Custom.to_string()).changed()
+                    }).inner.is_some_and(|i| i);
+                    if ui.button("Add Color").clicked() {
+                        options_edited = true;
+                        state.options.gradient_colors.push([100, 0, 0]);
+                    }
+
+                    if options_edited {
+                        if let Err(e) = fs::write(CONFIG_DIR.join("editor.toml"), toml::to_string_pretty(&state.options).unwrap()) {
+                            state.config_io_error = Some(format!("Couldn't write config: {e:?}"));
+                        }
+                    }
                 });
         },
     )

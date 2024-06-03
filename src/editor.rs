@@ -22,19 +22,21 @@ use nih_plug::prelude::Editor;
 use nih_plug_egui::egui::epaint::{PathShape, PathStroke};
 use nih_plug_egui::egui::mutex::Mutex;
 use nih_plug_egui::egui::{
-    include_image, pos2, remap, remap_clamp, vec2, Align2, Color32, DragValue, FontData, FontDefinitions, FontId, Frame, Grid, Layout, Margin, Mesh, Pos2, Rect, RichText, Rounding, Sense, Stroke, Ui, WidgetText, Window
+    include_image, pos2, remap, remap_clamp, vec2, Align2, Color32, DragValue, FontData,
+    FontDefinitions, FontId, Frame, Grid, Layout, Margin, Mesh, Pos2, Rect, RichText, Rounding,
+    Sense, Stroke, Ui, WidgetText, Window,
 };
 use nih_plug_egui::{create_egui_editor, egui, EguiState};
 use noise::{NoiseFn, OpenSimplex, Perlin};
 use num_complex::Complex32;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
-use strum_macros::Display;
-use std::fs;
 use std::f32::consts::E;
+use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
+use strum_macros::Display;
 
 use self::utils::{begin_set, end_set, get_set, get_set_normalized};
 
@@ -63,7 +65,11 @@ where
     );
 }
 
-static CONFIG_DIR: Lazy<PathBuf> = Lazy::new(|| ProjectDirs::from("space", "cozy dsp", "Scale Colorizr").map(|d| d.config_dir().to_path_buf()).expect("no home directory is set"));
+static CONFIG_DIR: Lazy<PathBuf> = Lazy::new(|| {
+    ProjectDirs::from("space", "cozy dsp", "Scale Colorizr")
+        .map(|d| d.config_dir().to_path_buf())
+        .expect("no home directory is set")
+});
 
 #[derive(Default)]
 struct EditorState {
@@ -71,14 +77,18 @@ struct EditorState {
     show_about: bool,
     show_settings: bool,
     config_io_error: Option<String>,
-    options: EditorOptions
+    options: EditorOptions,
 }
 
 #[derive(Default, Deserialize, Serialize, Display, PartialEq)]
 enum GradientType {
     #[default]
     Rainbow,
-    Custom
+    Lesbian,
+    Bi,
+    Trans,
+    Ace,
+    Custom,
 }
 
 #[derive(Default, Deserialize, Serialize)]
@@ -100,7 +110,6 @@ pub fn create(
     midi_debug: Arc<AtomicCell<Option<NoteEvent<()>>>>,
     biquads: Arc<FilterDisplay>,
 ) -> Option<Box<dyn Editor>> {
-
     create_egui_editor(
         params.editor_state.clone(),
         EditorState::default(),
@@ -125,27 +134,27 @@ pub fn create(
                 state.config_io_error = Some(format!("{e:?}"));
             } else {
                 match std::fs::try_exists(CONFIG_DIR.join("editor.toml")) {
-                    Ok(true) => {
-                        match std::fs::read_to_string(CONFIG_DIR.join("editor.toml")) {
-                            Ok(file) => {
-                                match toml::from_str(&file) {
-                                    Ok(options) => state.options = options,
-                                    Err(e) => state.config_io_error = Some(format!("Invalid config - {e:?}"))
-                                }
-                            },
+                    Ok(true) => match std::fs::read_to_string(CONFIG_DIR.join("editor.toml")) {
+                        Ok(file) => match toml::from_str(&file) {
+                            Ok(options) => state.options = options,
                             Err(e) => {
-                                state.config_io_error = Some(format!("Can't read config - {e:?}"));
+                                state.config_io_error = Some(format!("Invalid config - {e:?}"))
                             }
+                        },
+                        Err(e) => {
+                            state.config_io_error = Some(format!("Can't read config - {e:?}"));
                         }
                     },
                     Ok(false) => {
-                        if let Err(e) = fs::write(CONFIG_DIR.join("editor.toml"), toml::to_string_pretty(&EditorOptions::default()).unwrap()) {
-                            state.config_io_error = Some(format!("Couldn't write default config - {e:?}"));
+                        if let Err(e) = fs::write(
+                            CONFIG_DIR.join("editor.toml"),
+                            toml::to_string_pretty(&EditorOptions::default()).unwrap(),
+                        ) {
+                            state.config_io_error =
+                                Some(format!("Couldn't write default config - {e:?}"));
                         }
                     }
-                    Err(e) => {
-                        state.config_io_error = Some(format!("Can't read config - {e:?}"))
-                    }
+                    Err(e) => state.config_io_error = Some(format!("Can't read config - {e:?}")),
                 }
             }
 
@@ -177,7 +186,8 @@ pub fn create(
                     ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
                         switch(ui, &params.filter_mode, setter);
                         if let Some(error) = &state.config_io_error {
-                            ui.label(RichText::new("⚠").color(Color32::GOLD)).on_hover_text(error);
+                            ui.label(RichText::new("⚠").color(Color32::GOLD))
+                                .on_hover_text(error);
                         }
                     })
                 });
@@ -219,19 +229,113 @@ pub fn create(
 
                         draw_log_grid(ui, rect);
 
-                        draw_spectrum(ui, rect, &pre_spectrum, sample_rate.clone(), Color32::GRAY.gamma_multiply(remap(ui.ctx().animate_bool("delta_active".into(), !params.delta.modulated_plain_value()), 0.0..=1.0, 0.25..=1.0)));
+                        draw_spectrum(
+                            ui,
+                            rect,
+                            &pre_spectrum,
+                            sample_rate.clone(),
+                            Color32::GRAY.gamma_multiply(remap(
+                                ui.ctx().animate_bool(
+                                    "delta_active".into(),
+                                    !params.delta.modulated_plain_value(),
+                                ),
+                                0.0..=1.0,
+                                0.25..=1.0,
+                            )),
+                        );
                         draw_spectrum(
                             ui,
                             rect,
                             &post_spectrum,
                             sample_rate.clone(),
-                            cozy_ui::colors::HIGHLIGHT_COL32.gamma_multiply(ui.memory(|m| m.data.get_temp("active_amt".into()).unwrap_or(0.0))),
+                            cozy_ui::colors::HIGHLIGHT_COL32.gamma_multiply(
+                                ui.memory(|m| m.data.get_temp("active_amt".into()).unwrap_or(0.0)),
+                            ),
                         );
 
                         let filter_line_stopwatch = Sw::new_started();
                         match state.options.gradient_type {
-                            GradientType::Rainbow => draw_filter_line(ui, rect, &biquads, colorgrad::preset::rainbow()),
-                            GradientType::Custom => draw_filter_line(ui, rect, &biquads, colorgrad::GradientBuilder::new().colors(&state.options.gradient_colors.iter().map(|[r, g, b]| Color::from_rgba8(*r, *g, *b, 255)).collect::<Vec<Color>>()).mode(colorgrad::BlendMode::Oklab).build::<CatmullRomGradient>().unwrap()),
+                            GradientType::Rainbow => {
+                                draw_filter_line(ui, rect, &biquads, colorgrad::preset::rainbow())
+                            }
+                            GradientType::Lesbian => draw_filter_line(
+                                ui,
+                                rect,
+                                &biquads,
+                                colorgrad::GradientBuilder::new()
+                                    .colors(&[
+                                        Color::from_rgba8(213, 45, 0, 255),
+                                        Color::from_rgba8(238, 118, 39, 255),
+                                        Color::from_rgba8(255, 154, 86, 255),
+                                        Color::from_rgba8(255, 255, 255, 255),
+                                        Color::from_rgba8(209, 98, 164, 255),
+                                        Color::from_rgba8(181, 86, 144, 255),
+                                        Color::from_rgba8(163, 2, 98, 255),
+                                    ])
+                                    .mode(colorgrad::BlendMode::Oklab)
+                                    .build::<CatmullRomGradient>()
+                                    .unwrap(),
+                            ),
+                            GradientType::Bi => draw_filter_line(
+                                ui,
+                                rect,
+                                &biquads,
+                                colorgrad::GradientBuilder::new()
+                                    .colors(&[
+                                        Color::from_rgba8(214, 2, 12, 255),
+                                        Color::from_rgba8(155, 79, 150, 255),
+                                        Color::from_rgba8(0, 56, 168, 255),
+                                    ])
+                                    .mode(colorgrad::BlendMode::Oklab)
+                                    .build::<CatmullRomGradient>()
+                                    .unwrap(),
+                            ),
+                            GradientType::Trans => draw_filter_line(
+                                ui,
+                                rect,
+                                &biquads,
+                                colorgrad::GradientBuilder::new()
+                                    .colors(&[
+                                        Color::from_rgba8(91, 206, 250, 255),
+                                        Color::from_rgba8(245, 169, 184, 255),
+                                        Color::from_rgba8(255, 255, 255, 255),
+                                    ])
+                                    .mode(colorgrad::BlendMode::Oklab)
+                                    .build::<CatmullRomGradient>()
+                                    .unwrap(),
+                            ),
+                            GradientType::Ace => draw_filter_line(
+                                ui,
+                                rect,
+                                &biquads,
+                                colorgrad::GradientBuilder::new()
+                                    .colors(&[
+                                        Color::from_rgba8(0, 0, 0, 255),
+                                        Color::from_rgba8(163, 163, 163, 255),
+                                        Color::from_rgba8(255, 255, 255, 255),
+                                        Color::from_rgba8(128, 0, 128, 255),
+                                    ])
+                                    .mode(colorgrad::BlendMode::Oklab)
+                                    .build::<CatmullRomGradient>()
+                                    .unwrap(),
+                            ),
+                            GradientType::Custom => draw_filter_line(
+                                ui,
+                                rect,
+                                &biquads,
+                                colorgrad::GradientBuilder::new()
+                                    .colors(
+                                        &state
+                                            .options
+                                            .gradient_colors
+                                            .iter()
+                                            .map(|[r, g, b]| Color::from_rgba8(*r, *g, *b, 255))
+                                            .collect::<Vec<Color>>(),
+                                    )
+                                    .mode(colorgrad::BlendMode::Oklab)
+                                    .build::<CatmullRomGradient>()
+                                    .unwrap(),
+                            ),
                         };
                         let draw_time = filter_line_stopwatch.elapsed();
                         ui.memory_mut(|memory| {
@@ -329,14 +433,22 @@ pub fn create(
                     ui.add(toggle("safety_switch", "SAFETY SWITCH", get_set(&params.safety_switch, setter), begin_set(&params.safety_switch, setter), end_set(&params.safety_switch, setter)));
                     ui.separator();
                     ui.heading("Gradient Editor");
-                    let mut options_edited = state.options.gradient_colors.iter_mut().map(|color| ui.color_edit_button_srgb(color)).any(|r| r.changed());
-                    options_edited |= egui::ComboBox::from_label("Gradient Type").selected_text(state.options.gradient_type.to_string()).show_ui(ui, |ui| {
+                    let mut options_edited = egui::ComboBox::from_label("Gradient Type").selected_text(state.options.gradient_type.to_string()).show_ui(ui, |ui| {
                         ui.selectable_value(&mut state.options.gradient_type, GradientType::Rainbow, GradientType::Rainbow.to_string()).changed() ||
+                        ui.selectable_value(&mut state.options.gradient_type, GradientType::Lesbian, GradientType::Lesbian.to_string()).changed() ||
+                        ui.selectable_value(&mut state.options.gradient_type, GradientType::Bi, GradientType::Bi.to_string()).changed() ||
+                        ui.selectable_value(&mut state.options.gradient_type, GradientType::Trans, GradientType::Trans.to_string()).changed() ||
+                        ui.selectable_value(&mut state.options.gradient_type, GradientType::Ace, GradientType::Ace.to_string()).changed() ||
                         ui.selectable_value(&mut state.options.gradient_type, GradientType::Custom, GradientType::Custom.to_string()).changed()
                     }).inner.is_some_and(|i| i);
-                    if ui.button("Add Color").clicked() {
-                        options_edited = true;
-                        state.options.gradient_colors.push([100, 0, 0]);
+
+                    if let GradientType::Custom = state.options.gradient_type {
+                        options_edited |= state.options.gradient_colors.iter_mut().map(|color| ui.color_edit_button_srgb(color)).fold(false, |acc, i| acc | i.changed());
+
+                        if ui.button("Add Color").clicked() {
+                            options_edited = true;
+                            state.options.gradient_colors.push([100, 0, 0]);
+                        }
                     }
 
                     if options_edited {
@@ -449,7 +561,6 @@ fn draw_spectrum(
         mesh.add_triangle(0, 1, 2);
         mesh.add_triangle(3, 2, 0);
 
-
         painter.add(mesh);
     }
 
@@ -498,7 +609,11 @@ fn draw_filter_line<G: Gradient + Sync + Send + 'static>(
 
         points.push(Pos2::new(
             x,
-            remap((result.norm().log10() * 0.05 + 0.5).max(0.0), 0.0..=1.0, rect.bottom_up_range()),
+            remap(
+                (result.norm().log10() * 0.05 + 0.5).max(0.0),
+                0.0..=1.0,
+                rect.bottom_up_range(),
+            ),
         ));
     }
 
@@ -540,23 +655,46 @@ fn draw_filter_line<G: Gradient + Sync + Send + 'static>(
 
 fn switch<T: Enum + PartialEq>(ui: &mut Ui, param: &EnumParam<T>, setter: &ParamSetter) {
     ui.horizontal(|ui| {
-        Frame::default().rounding(Rounding::same(5.0)).fill(Color32::DARK_GRAY).inner_margin(Margin::same(4.0)).show(ui, |ui| {
-            for variant in T::variants().iter().rev() {
-                let galley = WidgetText::from(variant.to_uppercase()).into_galley(ui, None, 50.0, FontId::new(10.0, egui::FontFamily::Name("0x".into())));
+        Frame::default()
+            .rounding(Rounding::same(5.0))
+            .fill(Color32::DARK_GRAY)
+            .inner_margin(Margin::same(4.0))
+            .show(ui, |ui| {
+                for variant in T::variants().iter().rev() {
+                    let galley = WidgetText::from(variant.to_uppercase()).into_galley(
+                        ui,
+                        None,
+                        50.0,
+                        FontId::new(10.0, egui::FontFamily::Name("0x".into())),
+                    );
 
-                let (rect, response) = ui.allocate_exact_size(galley.rect.size(), Sense::click());
-                let response = response.on_hover_cursor(egui::CursorIcon::Grab);
-                ui.painter_at(rect).galley(pos2(
-                    rect.center().x - galley.size().x / 2.0,
-                    0.5f32.mul_add(-galley.size().y, rect.center().y),
-                ), galley, if param.modulated_normalized_value() == param.string_to_normalized_value(variant).unwrap() { HIGHLIGHT_COL32 } else { Color32::WHITE });
+                    let (rect, response) =
+                        ui.allocate_exact_size(galley.rect.size(), Sense::click());
+                    let response = response.on_hover_cursor(egui::CursorIcon::Grab);
+                    ui.painter_at(rect).galley(
+                        pos2(
+                            rect.center().x - galley.size().x / 2.0,
+                            0.5f32.mul_add(-galley.size().y, rect.center().y),
+                        ),
+                        galley,
+                        if param.modulated_normalized_value()
+                            == param.string_to_normalized_value(variant).unwrap()
+                        {
+                            HIGHLIGHT_COL32
+                        } else {
+                            Color32::WHITE
+                        },
+                    );
 
-                if response.clicked() {
-                    setter.begin_set_parameter(param);
-                    setter.set_parameter_normalized(param, param.string_to_normalized_value(variant).unwrap());
-                    setter.end_set_parameter(param);
+                    if response.clicked() {
+                        setter.begin_set_parameter(param);
+                        setter.set_parameter_normalized(
+                            param,
+                            param.string_to_normalized_value(variant).unwrap(),
+                        );
+                        setter.end_set_parameter(param);
+                    }
                 }
-            }
-        });
+            });
     });
 }

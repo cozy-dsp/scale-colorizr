@@ -4,7 +4,7 @@
 mod editor;
 mod spectrum;
 
-use cozy_util::filter::{Biquad, BiquadCoefficients};
+use cozy_util::svf::SVF;
 use crossbeam::atomic::AtomicCell;
 use nih_plug::prelude::*;
 use nih_plug_egui::egui::mutex::Mutex;
@@ -18,7 +18,7 @@ pub const NUM_VOICES: usize = 128;
 pub const NUM_FILTERS: usize = 8;
 
 pub type FrequencyDisplay = [[AtomicCell<Option<f32>>; NUM_FILTERS]; NUM_VOICES];
-pub type BiquadDisplay = [[AtomicCell<Option<BiquadCoefficients<f32x2>>>; NUM_FILTERS]; NUM_VOICES];
+pub type FilterDisplay = [[AtomicCell<Option<SVF<f32x2>>>; NUM_FILTERS]; NUM_VOICES];
 
 pub const VERSION: &str = env!("VERGEN_GIT_DESCRIBE");
 
@@ -30,7 +30,7 @@ struct Voice {
     frequency: f32,
     internal_voice_id: u64,
     velocity_sqrt: f32,
-    filters: [Biquad<f32x2>; NUM_FILTERS],
+    filters: [SVF<f32x2>; NUM_FILTERS],
     releasing: bool,
     amp_envelope: Smoother<f32>,
 }
@@ -40,7 +40,7 @@ pub struct ScaleColorizr {
     voices: [Option<Voice>; NUM_VOICES],
     dry_signal: [f32x2; MAX_BLOCK_SIZE],
     frequency_display: Arc<FrequencyDisplay>,
-    biquad_display: Arc<BiquadDisplay>,
+    filter_display: Arc<FilterDisplay>,
     sample_rate: Arc<AtomicF32>,
     midi_event_debug: Arc<AtomicCell<Option<NoteEvent<()>>>>,
     next_internal_voice_id: u64,
@@ -90,7 +90,7 @@ impl Default for ScaleColorizr {
             frequency_display: Arc::new(core::array::from_fn(|_| {
                 core::array::from_fn(|_| AtomicCell::default())
             })),
-            biquad_display: Arc::new(core::array::from_fn(|_| {
+            filter_display: Arc::new(core::array::from_fn(|_| {
                 core::array::from_fn(|_| AtomicCell::default())
             })),
             sample_rate: Arc::new(AtomicF32::new(1.0)),
@@ -202,7 +202,7 @@ impl Plugin for ScaleColorizr {
             self.post_spectrum_output.clone(),
             self.sample_rate.clone(),
             self.midi_event_debug.clone(),
-            self.biquad_display.clone(),
+            self.filter_display.clone(),
         )
     }
 
@@ -364,15 +364,12 @@ impl Plugin for ScaleColorizr {
                         let adjusted_frequency = (frequency - voice.frequency)
                             / (voice.frequency * (NUM_FILTERS / 2) as f32);
                         let amp_falloff = (-adjusted_frequency).exp();
-                        filter.coefficients = match self.params.filter_mode.value() {
-                            FilterMode::Peak => BiquadCoefficients::peaking_eq(
-                                sample_rate,
-                                frequency,
-                                amp * amp_falloff,
-                                40.0,
-                            ),
-                            FilterMode::Notch => BiquadCoefficients::notch(sample_rate, frequency, 0.25),
+                        filter.set_sample_rate(sample_rate);
+                        match self.params.filter_mode.value() {
+                            FilterMode::Peak => filter.set_bell(frequency, 40.0, amp * amp_falloff),
+                            FilterMode::Notch => filter.set_notch(frequency, 40.0),
                         };
+
                         sample = filter.process(sample);
                     }
 
@@ -421,7 +418,7 @@ impl Plugin for ScaleColorizr {
             for (voice, displays) in self.voices.iter().zip(self.frequency_display.iter()) {
                 if let Some(voice) = voice {
                     for (voice_filter, display) in voice.filters.iter().zip(displays) {
-                        display.store(Some(voice_filter.coefficients.frequency()));
+                        display.store(Some(voice_filter.frequency()));
                     }
                 } else {
                     for display in displays {
@@ -430,10 +427,10 @@ impl Plugin for ScaleColorizr {
                 }
             }
 
-            for (voice, displays) in self.voices.iter().zip(self.biquad_display.iter()) {
+            for (voice, displays) in self.voices.iter().zip(self.filter_display.iter()) {
                 if let Some(voice) = voice {
                     for (voice_filter, display) in voice.filters.iter().zip(displays) {
-                        display.store(Some(voice_filter.coefficients));
+                        display.store(Some(*voice_filter));
                     }
                 } else {
                     for display in displays {
@@ -473,7 +470,7 @@ impl ScaleColorizr {
             releasing: false,
             amp_envelope: Smoother::none(),
 
-            filters: [Biquad::default(); NUM_FILTERS],
+            filters: [SVF::default(); NUM_FILTERS],
         };
         self.next_internal_voice_id = self.next_internal_voice_id.wrapping_add(1);
 

@@ -3,13 +3,13 @@
 
 use crate::editor::utils::PowersOfTen;
 use crate::spectrum::SpectrumOutput;
-use crate::{BiquadDisplay, FrequencyDisplay, ScaleColorizrParams, VERSION};
+use crate::{FilterDisplay, FrequencyDisplay, ScaleColorizrParams, VERSION};
 use colorgrad::{Color, Gradient};
 use cozy_ui::centered;
 use cozy_ui::colors::HIGHLIGHT_COL32;
 use cozy_ui::widgets::button::toggle;
 use cozy_ui::widgets::Knob;
-use cozy_util::filter::BiquadCoefficients;
+use cozy_util::svf::SVF;
 use crossbeam::atomic::AtomicCell;
 use libsw::Sw;
 use nih_plug::context::gui::ParamSetter;
@@ -77,7 +77,7 @@ pub fn create(
     post_spectrum: Arc<Mutex<SpectrumOutput>>,
     sample_rate: Arc<AtomicF32>,
     midi_debug: Arc<AtomicCell<Option<NoteEvent<()>>>>,
-    biquads: Arc<BiquadDisplay>,
+    biquads: Arc<FilterDisplay>,
 ) -> Option<Box<dyn Editor>> {
     let gradient = colorgrad::preset::rainbow();
 
@@ -387,7 +387,7 @@ fn draw_spectrum(
 fn draw_filter_line<G: Gradient + Sync + Send + 'static>(
     ui: &mut Ui,
     rect: Rect,
-    biquads: &Arc<BiquadDisplay>,
+    biquads: &Arc<FilterDisplay>,
     gradient: G,
 ) {
     static ANIMATE_NOISE: Lazy<Perlin> = Lazy::new(|| Perlin::new(rand::random()));
@@ -398,7 +398,7 @@ fn draw_filter_line<G: Gradient + Sync + Send + 'static>(
     let mut points = Vec::with_capacity(rect.width().round() as usize);
     let mut sampled_frequencies = Vec::with_capacity(rect.width().round() as usize);
 
-    let active_biquads: Vec<BiquadCoefficients<_>> = biquads
+    let active_biquads: Vec<SVF<_>> = biquads
         .iter()
         .flatten()
         .filter_map(AtomicCell::load)

@@ -26,19 +26,19 @@ cozy-util = { git = "https://vcs.cozydsp.space/cozy-dsp/cozy-util.git", version 
 nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git", features = ["assert_process_allocs", "simd"] }
 nih_plug_egui = { git = "https://github.com/robbert-vdh/nih-plug.git"}
 noise = "0.9"
-num-complex = "0.4.5"
-rand = "0.8.5"
-serde = { version = "1.0.197", features = ["derive"] }
-once_cell = { version = "1.19.0", features = ["parking_lot"] }
+num-complex = "0.4"
+rand = "0.8"
+serde = { version = "1.0", features = ["derive"] }
+once_cell = { version = "1", features = ["parking_lot"] }
 libsw = "3.3"
 cozy-ui = { git = "https://vcs.cozydsp.space/cozy-dsp/cozy-ui.git", version = "0.1.0" }
 egui_extras = { version = "0.27", features = ["image"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
-realfft = "3.3.0"
-triple_buffer = "7.0.0"
-directories = "5.0.1"
-toml = "0.8.14"
-strum_macros = "0.26.3"
+realfft = "3.3"
+triple_buffer = "7"
+directories = "5"
+toml = "0.8"
+strum_macros = "0.26"
 
 [patch.crates-io]
 egui = { git = "https://github.com/emilk/egui.git", rev = "c8578c9a6b78ff4b37b86f23264fbf78d826365c" }

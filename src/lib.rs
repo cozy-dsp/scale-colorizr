@@ -54,7 +54,7 @@ pub struct ScaleColorizr {
 #[derive(Enum, PartialEq)]
 enum FilterMode {
     Peak,
-    Notch
+    Notch,
 }
 
 #[derive(Params)]
@@ -75,7 +75,7 @@ struct ScaleColorizrParams {
     #[id = "voice-count"]
     pub voice_count: IntParam,
     #[id = "filter-mod"]
-    pub filter_mode: EnumParam<FilterMode>
+    pub filter_mode: EnumParam<FilterMode>,
 }
 
 impl Default for ScaleColorizr {
@@ -149,7 +149,7 @@ impl Default for ScaleColorizrParams {
                     max: NUM_VOICES as i32,
                 },
             ),
-            filter_mode: EnumParam::new("Filter Mode", FilterMode::Peak)
+            filter_mode: EnumParam::new("Filter Mode", FilterMode::Peak),
         }
     }
 }

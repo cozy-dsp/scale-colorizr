@@ -70,6 +70,9 @@ static CONFIG_DIR: Lazy<PathBuf> = Lazy::new(|| {
         .map(|d| d.config_dir().to_path_buf())
         .expect("no home directory is set")
 });
+static CONFIG_FILE: Lazy<PathBuf> = Lazy::new(|| {
+    CONFIG_DIR.join("config.toml")
+});
 
 #[derive(Default)]
 struct EditorState {
@@ -115,6 +118,12 @@ pub fn create(
         EditorState::default(),
         |ctx, state| {
             cozy_ui::setup(ctx);
+            ctx.style_mut(|style| {
+                style.visuals.widgets.open.weak_bg_fill = cozy_ui::colors::WIDGET_BACKGROUND_COL32;
+                style.visuals.selection.bg_fill = cozy_ui::colors::HIGHLIGHT_COL32.gamma_multiply(0.5);
+                style.visuals.window_highlight_topmost = false;
+            });
+
             egui_extras::install_image_loaders(ctx);
 
             let mut fonts = FontDefinitions::default();
@@ -130,11 +139,13 @@ pub fn create(
                 .or_default()
                 .insert(0, "0x".to_string());
 
+            ctx.set_fonts(fonts);
+
             if let Err(e) = std::fs::create_dir_all(CONFIG_DIR.as_path()) {
                 state.config_io_error = Some(format!("{e:?}"));
             } else {
-                match std::fs::try_exists(CONFIG_DIR.join("editor.toml")) {
-                    Ok(true) => match std::fs::read_to_string(CONFIG_DIR.join("editor.toml")) {
+                match std::fs::try_exists(CONFIG_FILE.as_path()) {
+                    Ok(true) => match std::fs::read_to_string(CONFIG_FILE.as_path()) {
                         Ok(file) => match toml::from_str(&file) {
                             Ok(options) => state.options = options,
                             Err(e) => {
@@ -147,7 +158,7 @@ pub fn create(
                     },
                     Ok(false) => {
                         if let Err(e) = fs::write(
-                            CONFIG_DIR.join("editor.toml"),
+                            CONFIG_FILE.as_path(),
                             toml::to_string_pretty(&EditorOptions::default()).unwrap(),
                         ) {
                             state.config_io_error =
@@ -157,8 +168,6 @@ pub fn create(
                     Err(e) => state.config_io_error = Some(format!("Can't read config - {e:?}")),
                 }
             }
-
-            ctx.set_fonts(fonts);
         },
         move |ctx, setter, state| {
             egui::TopBottomPanel::top("menu").show(ctx, |ui| {
@@ -465,7 +474,7 @@ pub fn create(
                     }
 
                     if options_edited {
-                        if let Err(e) = fs::write(CONFIG_DIR.join("editor.toml"), toml::to_string_pretty(&state.options).unwrap()) {
+                        if let Err(e) = fs::write(CONFIG_FILE.as_path(), toml::to_string_pretty(&state.options).unwrap()) {
                             state.config_io_error = Some(format!("Couldn't write config: {e:?}"));
                         }
                     }

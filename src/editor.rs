@@ -443,7 +443,20 @@ pub fn create(
                     }).inner.is_some_and(|i| i);
 
                     if let GradientType::Custom = state.options.gradient_type {
-                        options_edited |= state.options.gradient_colors.iter_mut().map(|color| ui.color_edit_button_srgb(color)).fold(false, |acc, i| acc | i.changed());
+                        let to_remove: Vec<_> = state.options.gradient_colors.iter_mut().enumerate().filter_map(|(i, color)| ui.horizontal(|ui| {
+                            let changed = ui.color_edit_button_srgb(color).changed();
+                            if ui.button("Delete").clicked() {
+                                options_edited = true;
+                                Some(i)
+                            } else {
+                                options_edited |= changed;
+                                None
+                            }
+                        }).inner).collect();
+                        
+                        for i in to_remove {
+                            state.options.gradient_colors.remove(i);
+                        }
 
                         if ui.button("Add Color").clicked() {
                             options_edited = true;

@@ -645,7 +645,8 @@ dependencies = [
 [[package]]
 name = "cozy-util"
 version = "0.1.0"
-source = "git+https://vcs.cozydsp.space/cozy-dsp/cozy-util.git#04297c69b26b036bc2aaf14bb5048a37dda61444"
+source = "sparse+https://vcs.cozydsp.space/api/packages/cozy-dsp/cargo/"
+checksum = "add6e65a5c7f2a91a6573eae9cfc89d1b752d6cc4f91dba267cdecc4ee2789de"
 dependencies = [
  "num-complex",
 ]
@@ -2425,7 +2426,7 @@ dependencies = [
  "serde",
  "serde_spanned",
  "toml_datetime",
- "winnow 0.6.10",
+ "winnow 0.6.11",
 ]
 
 [[package]]
@@ -2980,9 +2981,9 @@ dependencies = [
 
 [[package]]
 name = "winnow"
-version = "0.6.10"
+version = "0.6.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f217b6745021054125ef5741032a021a9c65f82bee2a8017cca928f1e3179991"
+checksum = "56c52728401e1dc672a56e81e593e912aa54c78f40246869f78359a2bf24d29d"
 dependencies = [
  "memchr",
 ]

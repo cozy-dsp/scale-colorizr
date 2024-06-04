@@ -1,2 +1,5 @@
 [alias]
 xtask = "run --package xtask --release --"
+
+[registries.cdsp]
+index = "sparse+https://vcs.cozydsp.space/api/packages/cozy-dsp/cargo/"

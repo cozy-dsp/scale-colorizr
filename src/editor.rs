@@ -70,9 +70,7 @@ static CONFIG_DIR: Lazy<PathBuf> = Lazy::new(|| {
         .map(|d| d.config_dir().to_path_buf())
         .expect("no home directory is set")
 });
-static CONFIG_FILE: Lazy<PathBuf> = Lazy::new(|| {
-    CONFIG_DIR.join("config.toml")
-});
+static CONFIG_FILE: Lazy<PathBuf> = Lazy::new(|| CONFIG_DIR.join("config.toml"));
 
 #[derive(Default)]
 struct EditorState {
@@ -120,7 +118,8 @@ pub fn create(
             cozy_ui::setup(ctx);
             ctx.style_mut(|style| {
                 style.visuals.widgets.open.weak_bg_fill = cozy_ui::colors::WIDGET_BACKGROUND_COL32;
-                style.visuals.selection.bg_fill = cozy_ui::colors::HIGHLIGHT_COL32.gamma_multiply(0.5);
+                style.visuals.selection.bg_fill =
+                    cozy_ui::colors::HIGHLIGHT_COL32.gamma_multiply(0.5);
                 style.visuals.window_highlight_topmost = false;
             });
 
@@ -225,6 +224,13 @@ pub fn create(
                             &params.release,
                             50.0,
                             "The release for the filter envelope",
+                        );
+                        knob(
+                            ui,
+                            setter,
+                            &params.band_width,
+                            50.0,
+                            "Changes how narrow the filters are",
                         );
                     });
                 })

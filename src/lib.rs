@@ -68,6 +68,8 @@ struct ScaleColorizrParams {
     pub attack: FloatParam,
     #[id = "release"]
     pub release: FloatParam,
+    #[id = "band-width"]
+    pub band_width: FloatParam,
     #[id = "delta"]
     pub delta: BoolParam,
     #[id = "safety-switch"]
@@ -139,6 +141,18 @@ impl Default for ScaleColorizrParams {
             )
             .with_unit(" ms")
             .with_step_size(0.1),
+
+            band_width: FloatParam::new(
+                "Band Width",
+                100.0,
+                FloatRange::Linear {
+                    min: 100.0,
+                    max: 300.0,
+                },
+            )
+            .with_unit("%")
+            .with_step_size(0.1),
+
             delta: BoolParam::new("Delta", false),
             safety_switch: BoolParam::new("SAFETY SWITCH", true).hide(),
             voice_count: IntParam::new(
@@ -366,9 +380,12 @@ impl Plugin for ScaleColorizr {
                             / (voice.frequency * (NUM_FILTERS / 2) as f32);
                         let amp_falloff = (-adjusted_frequency).exp();
                         filter.set_sample_rate(sample_rate);
+
+                        let q = 40.0 - 39.0 * self.params.band_width.modulated_normalized_value();
+
                         match self.params.filter_mode.value() {
-                            FilterMode::Peak => filter.set_bell(frequency, 40.0, amp * amp_falloff),
-                            FilterMode::Notch => filter.set_notch(frequency, 40.0),
+                            FilterMode::Peak => filter.set_bell(frequency, q, amp * amp_falloff),
+                            FilterMode::Notch => filter.set_notch(frequency, q),
                         };
 
                         sample = filter.process(sample);

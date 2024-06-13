@@ -31,7 +31,7 @@ rand = "0.8"
 serde = { version = "1.0", features = ["derive"] }
 once_cell = { version = "1", features = ["parking_lot"] }
 libsw = "3.3"
-cozy-ui = { git = "https://vcs.cozydsp.space/cozy-dsp/cozy-ui.git", version = "0.1.0" }
+cozy-ui = { git = "https://vcs.cozydsp.space/cozy-dsp/cozy-ui.git", rev = "825f59d54450bcbf704225a75376f4aeee721a93", version = "0.1.0" }
 egui_extras = { version = "0.27", features = ["image"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 realfft = "3.3"
@@ -41,8 +41,11 @@ toml = "0.8"
 strum_macros = "0.26"
 
 [patch.crates-io]
-egui = { git = "https://github.com/emilk/egui.git", rev = "c8578c9a6b78ff4b37b86f23264fbf78d826365c" }
-egui_extras = { git = "https://github.com/emilk/egui.git", rev = "c8578c9a6b78ff4b37b86f23264fbf78d826365c" }
+egui = { git = "https://github.com/emilk/egui.git", rev = "814ad0783cf8b826a258e29ed4c50ae6daa2e890" }
+egui_extras = { git = "https://github.com/emilk/egui.git", rev = "814ad0783cf8b826a258e29ed4c50ae6daa2e890" }
+
+[patch."https://github.com/BillyDM/egui-baseview"]
+egui-baseview = {git = "https://github.com/murl-digital/egui-baseview", rev = "275cb4c3ed86d98ea557259383d71d2847b8babf"}
 
 [build-dependencies]
 anyhow = "1.0.81"

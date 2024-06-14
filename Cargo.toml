@@ -23,8 +23,8 @@ editor = ["nih_plug/standalone"]
 crossbeam = "0.8.4"
 colorgrad = { git = "https://github.com/mazznoer/colorgrad-rs.git" }
 cozy-util = { registry = "cdsp", version = "0.1.0", features = ["simd"] }
-nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git", features = ["assert_process_allocs", "simd"] }
-nih_plug_egui = { git = "https://github.com/robbert-vdh/nih-plug.git"}
+nih_plug = { git = "https://github.com/murl-digital/nih-plug.git", rev = "8ba316bd4859dd1f1f58fbae9538b3877c51a8c4", features = ["assert_process_allocs", "simd"] }
+nih_plug_egui = { git = "https://github.com/murl-digital/nih-plug.git", rev = "8ba316bd4859dd1f1f58fbae9538b3877c51a8c4", default-features = false, features = ["wgpu", "default_fonts"]}
 noise = "0.9"
 num-complex = "0.4"
 rand = "0.8"
@@ -43,9 +43,9 @@ strum_macros = "0.26"
 [patch.crates-io]
 egui = { git = "https://github.com/emilk/egui.git", rev = "814ad0783cf8b826a258e29ed4c50ae6daa2e890" }
 egui_extras = { git = "https://github.com/emilk/egui.git", rev = "814ad0783cf8b826a258e29ed4c50ae6daa2e890" }
-
-[patch."https://github.com/BillyDM/egui-baseview"]
-egui-baseview = {git = "https://github.com/murl-digital/egui-baseview", rev = "275cb4c3ed86d98ea557259383d71d2847b8babf"}
+ecolor = { git = "https://github.com/emilk/egui.git", rev = "814ad0783cf8b826a258e29ed4c50ae6daa2e890" }
+epaint = { git = "https://github.com/emilk/egui.git", rev = "814ad0783cf8b826a258e29ed4c50ae6daa2e890" }
+egui-wgpu = { git = "https://github.com/emilk/egui.git", rev = "814ad0783cf8b826a258e29ed4c50ae6daa2e890" }
 
 [build-dependencies]
 anyhow = "1.0.81"

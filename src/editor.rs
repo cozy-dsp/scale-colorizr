@@ -24,7 +24,7 @@ use nih_plug_egui::egui::mutex::Mutex;
 use nih_plug_egui::egui::{
     include_image, pos2, remap, remap_clamp, vec2, Align2, Color32, DragValue, FontData,
     FontDefinitions, FontId, Frame, Grid, Layout, Margin, Mesh, Pos2, Rect, RichText, Rounding,
-    Sense, Stroke, Ui, WidgetText, Window,
+    Sense, Shadow, Stroke, Ui, WidgetText, Window,
 };
 use nih_plug_egui::{create_egui_editor, egui, EguiState};
 use noise::{NoiseFn, OpenSimplex, Perlin};
@@ -32,10 +32,10 @@ use num_complex::Complex32;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::f32::consts::E;
-use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
+use std::fs;
 use strum_macros::Display;
 
 use self::utils::{begin_set, end_set, get_set, get_set_normalized};
@@ -169,15 +169,22 @@ pub fn create(
             }
         },
         move |ctx, setter, state| {
-            egui::TopBottomPanel::top("menu").show(ctx, |ui| {
-                ui.horizontal(|ui| {
-                    let about_debug = if ui.input(|input| input.modifiers.shift) {
-                        &mut state.show_debug
-                    } else {
-                        &mut state.show_about
-                    };
-                    *about_debug |= ui.button("ABOUT").clicked();
-                    ui.add(
+            egui::TopBottomPanel::top("menu")
+                .frame(Frame::side_top_panel(&ctx.style()).shadow(Shadow {
+                    offset: vec2(0.0, 4.0),
+                    blur: 8.0,
+                    spread: 4.0,
+                    color: Color32::BLACK,
+                }))
+                .show(ctx, |ui| {
+                    ui.horizontal(|ui| {
+                        let about_debug = if ui.input(|input| input.modifiers.shift) {
+                            &mut state.show_debug
+                        } else {
+                            &mut state.show_about
+                        };
+                        *about_debug |= ui.button("ABOUT").clicked();
+                        ui.add(
                         toggle(
                             "delta",
                             params.delta.name().to_ascii_uppercase(),
@@ -189,17 +196,17 @@ pub fn create(
                             "Takes the difference between the dry and wet signal, the \"Delta\"",
                         ),
                     );
-                    state.show_settings |= ui.button("SETTINGS").clicked();
+                        state.show_settings |= ui.button("SETTINGS").clicked();
 
-                    ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
-                        switch(ui, &params.filter_mode, setter);
-                        if let Some(error) = &state.config_io_error {
-                            ui.label(RichText::new("⚠").color(Color32::GOLD))
-                                .on_hover_text(error);
-                        }
-                    })
+                        ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui| {
+                            switch(ui, &params.filter_mode, setter);
+                            if let Some(error) = &state.config_io_error {
+                                ui.label(RichText::new("⚠").color(Color32::GOLD))
+                                    .on_hover_text(error);
+                            }
+                        })
+                    });
                 });
-            });
 
             egui::TopBottomPanel::bottom("controls").show(ctx, |ui| {
                 ui.horizontal(|ui| {
@@ -468,7 +475,7 @@ pub fn create(
                                 None
                             }
                         }).inner).collect();
-                        
+
                         for i in to_remove {
                             state.options.gradient_colors.remove(i);
                         }

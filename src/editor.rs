@@ -32,10 +32,10 @@ use num_complex::Complex32;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::f32::consts::E;
+use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
-use std::fs;
 use strum_macros::Display;
 
 use self::utils::{begin_set, end_set, get_set, get_set_normalized};
@@ -143,7 +143,7 @@ pub fn create(
             if let Err(e) = std::fs::create_dir_all(CONFIG_DIR.as_path()) {
                 state.config_io_error = Some(format!("{e:?}"));
             } else {
-                match std::fs::try_exists(CONFIG_FILE.as_path()) {
+                match CONFIG_FILE.as_path().try_exists() {
                     Ok(true) => match std::fs::read_to_string(CONFIG_FILE.as_path()) {
                         Ok(file) => match toml::from_str(&file) {
                             Ok(options) => state.options = options,
@@ -445,7 +445,7 @@ pub fn create(
                                     params.voice_count.modulated_normalized_value() as f64
                                 }
                             }
-                        }).custom_parser(|s| params.voice_count.string_to_normalized_value(s).map(|v| v as f64)).speed(0.01).clamp_range(0.0..=1.0).custom_formatter(|v, _| {
+                        }).custom_parser(|s| params.voice_count.string_to_normalized_value(s).map(|v| v as f64)).speed(0.01).range(0.0..=1.0).custom_formatter(|v, _| {
                             params.voice_count.normalized_value_to_string(v as f32, false)
                         }))
                     });

@@ -23,29 +23,25 @@ editor = ["nih_plug/standalone"]
 crossbeam = "0.8.4"
 colorgrad = { git = "https://github.com/mazznoer/colorgrad-rs.git" }
 cozy-util = { registry = "cdsp", version = "0.1.0", features = ["simd"] }
-nih_plug = { git = "https://github.com/murl-digital/nih-plug.git", rev = "8ba316bd4859dd1f1f58fbae9538b3877c51a8c4", features = ["assert_process_allocs", "simd"] }
-nih_plug_egui = { git = "https://github.com/murl-digital/nih-plug.git", rev = "8ba316bd4859dd1f1f58fbae9538b3877c51a8c4", default-features = false, features = ["wgpu", "default_fonts"]}
+nih_plug = { git = "https://github.com/murl-digital/nih-plug.git", branch = "bump-dependencies", features = [
+    "assert_process_allocs",
+    "simd",
+] }
+nih_plug_egui = { git = "https://github.com/murl-digital/nih-plug.git", branch = "bump-dependencies" }
 noise = "0.9"
 num-complex = "0.4"
 rand = "0.8"
 serde = { version = "1.0", features = ["derive"] }
 once_cell = { version = "1", features = ["parking_lot"] }
 libsw = "3.3"
-cozy-ui = { git = "https://vcs.cozydsp.space/cozy-dsp/cozy-ui.git", rev = "825f59d54450bcbf704225a75376f4aeee721a93", version = "0.1.0" }
-egui_extras = { version = "0.27", features = ["image"] }
+cozy-ui = { git = "https://vcs.cozydsp.space/cozy-dsp/cozy-ui.git", version = "0.2.0" }
+egui_extras = { version = "0.28", features = ["image"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 realfft = "3.3"
 triple_buffer = "7"
 directories = "5"
 toml = "0.8"
 strum_macros = "0.26"
-
-[patch.crates-io]
-egui = { git = "https://github.com/emilk/egui.git", rev = "814ad0783cf8b826a258e29ed4c50ae6daa2e890" }
-egui_extras = { git = "https://github.com/emilk/egui.git", rev = "814ad0783cf8b826a258e29ed4c50ae6daa2e890" }
-ecolor = { git = "https://github.com/emilk/egui.git", rev = "814ad0783cf8b826a258e29ed4c50ae6daa2e890" }
-epaint = { git = "https://github.com/emilk/egui.git", rev = "814ad0783cf8b826a258e29ed4c50ae6daa2e890" }
-egui-wgpu = { git = "https://github.com/emilk/egui.git", rev = "814ad0783cf8b826a258e29ed4c50ae6daa2e890" }
 
 [build-dependencies]
 anyhow = "1.0.81"

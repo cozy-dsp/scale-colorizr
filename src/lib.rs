@@ -8,7 +8,6 @@ mod spectrum;
 use cozy_util::svf::SVF;
 use crossbeam::atomic::AtomicCell;
 use nih_plug::prelude::*;
-use nih_plug_egui::egui::mutex::Mutex;
 use nih_plug_egui::EguiState;
 use spectrum::{SpectrumInput, SpectrumOutput};
 use std::simd::f32x2;
@@ -321,7 +320,8 @@ impl Plugin for ScaleColorizr {
                         let amp_falloff = (-adjusted_frequency).exp();
                         filter.set_sample_rate(sample_rate);
 
-                        let q = 40.0 - 39.0 * self.params.band_width.modulated_normalized_value();
+                        let q = 39.0f32
+                            .mul_add(-self.params.band_width.modulated_normalized_value(), 40.0);
 
                         match self.params.filter_mode.value() {
                             FilterMode::Peak => filter.set_bell(frequency, q, amp * amp_falloff),
@@ -432,6 +432,7 @@ impl ScaleColorizr {
         };
         self.next_internal_voice_id = self.next_internal_voice_id.wrapping_add(1);
 
+        #[allow(clippy::cast_sign_loss)]
         if let Some(free_voice_idx) = self
             .voices
             .iter()
@@ -445,6 +446,7 @@ impl ScaleColorizr {
         // SAFETY: We can skip a lot of checked unwraps here since we already know all voices are in
         //         use
         let oldest_voice = unsafe {
+            #[allow(clippy::cast_sign_loss)]
             self.voices
                 .iter_mut()
                 .take(self.params.voice_count.value() as usize)

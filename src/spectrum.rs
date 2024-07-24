@@ -1,4 +1,5 @@
-// adapted from https://github.com/murl-digital/nih-plug/blob/master/plugins/diopser/src/spectrum.rs
+// adapted from https://github.com/robbert-vdh/nih-plug/blob/master/plugins/diopser/src/spectrum.rs
+#![allow(clippy::module_name_repetitions)]
 
 use nih_plug::prelude::*;
 use nih_plug::util::window::multiply_with_window;
@@ -51,7 +52,7 @@ pub struct SpectrumInput {
 
 impl SpectrumInput {
     /// Create a new spectrum input and output pair. The output should be moved to the editor.
-    pub fn new(num_channels: usize) -> (SpectrumInput, SpectrumOutput) {
+    pub fn new(num_channels: usize) -> (Self, SpectrumOutput) {
         let (triple_buffer_input, triple_buffer_output) =
             TripleBuffer::new(&[0.0; SPECTRUM_WINDOW_SIZE / 2 + 1]).split();
 
@@ -66,6 +67,7 @@ impl SpectrumInput {
             spectrum_result_buffer: [0.0; SPECTRUM_WINDOW_SIZE / 2 + 1],
 
             plan: RealFftPlanner::new().plan_fft_forward(SPECTRUM_WINDOW_SIZE),
+            #[allow(clippy::cast_precision_loss)]
             compensated_window_function: util::window::hann(SPECTRUM_WINDOW_SIZE)
                 .into_iter()
                 // Include the gain compensation in the window function to save some multiplications
@@ -82,12 +84,16 @@ impl SpectrumInput {
         // We'll express the dacay rate in the time it takes for the moving average to drop by 12 dB
         // NOTE: The effective sample rate accounts for the STFT interval, **and** for the number of
         //       channels. We'll average both channels to mono-ish.
+        #[allow(clippy::cast_precision_loss)]
         let effective_sample_rate = sample_rate / SPECTRUM_WINDOW_SIZE as f32
             * SPECTRUM_WINDOW_OVERLAP as f32
             * self.num_channels as f32;
-        let decay_samples = (SMOOTHING_DECAY_MS / 1000.0 * effective_sample_rate) as f64;
+        let decay_samples = f64::from(SMOOTHING_DECAY_MS / 1000.0 * effective_sample_rate);
 
-        self.smoothing_decay_weight = 0.25f64.powf(decay_samples.recip()) as f32
+        #[allow(clippy::cast_possible_truncation)]
+        {
+            self.smoothing_decay_weight = 0.25f64.powf(decay_samples.recip()) as f32;
+        }
     }
 
     /// Compute the spectrum for a buffer and send it to the corresponding output pair.
@@ -121,8 +127,10 @@ impl SpectrumInput {
                     if magnitude > *spectrum_result {
                         *spectrum_result = magnitude;
                     } else {
-                        *spectrum_result = (*spectrum_result * self.smoothing_decay_weight)
-                            + (magnitude * (1.0 - self.smoothing_decay_weight));
+                        *spectrum_result = (*spectrum_result).mul_add(
+                            self.smoothing_decay_weight,
+                            magnitude * (1.0 - self.smoothing_decay_weight),
+                        );
                     }
                 }
 

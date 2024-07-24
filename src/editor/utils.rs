@@ -60,7 +60,7 @@ pub struct PowersOfTen {
 }
 
 impl PowersOfTen {
-    pub fn new(min: f32, max: f32) -> Self {
+    pub const fn new(min: f32, max: f32) -> Self {
         Self { current: min, max }
     }
 }

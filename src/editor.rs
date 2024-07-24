@@ -20,7 +20,6 @@ use nih_plug::params::smoothing::AtomicF32;
 use nih_plug::params::{EnumParam, Param};
 use nih_plug::prelude::Editor;
 use nih_plug_egui::egui::epaint::{PathShape, PathStroke};
-use nih_plug_egui::egui::mutex::Mutex;
 use nih_plug_egui::egui::{
     include_image, pos2, remap, remap_clamp, vec2, Align2, Color32, DragValue, FontData,
     FontDefinitions, FontId, Frame, Grid, Layout, Margin, Mesh, Pos2, Rect, RichText, Rounding,
@@ -33,7 +32,6 @@ use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::f32::consts::E;
 use std::fs;
-use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -118,6 +116,7 @@ pub fn default_editor_state() -> Arc<EguiState> {
     EguiState::from_size(800, 600)
 }
 
+#[allow(clippy::too_many_lines)]
 pub fn create(
     params: Arc<ScaleColorizrParams>,
     displays: Arc<FrequencyDisplay>,
@@ -164,7 +163,7 @@ pub fn create(
                         Ok(file) => match toml::from_str(&file) {
                             Ok(options) => state.options = options,
                             Err(e) => {
-                                state.config_io_error = Some(format!("Invalid config - {e:?}"))
+                                state.config_io_error = Some(format!("Invalid config - {e:?}"));
                             }
                         },
                         Err(e) => {
@@ -271,7 +270,7 @@ pub fn create(
                             ui,
                             rect,
                             &mut state.pre_spectrum,
-                            sample_rate.clone(),
+                            &sample_rate,
                             Color32::GRAY.gamma_multiply(remap(
                                 ui.ctx().animate_bool(
                                     "delta_active".into(),
@@ -285,7 +284,7 @@ pub fn create(
                             ui,
                             rect,
                             &mut state.post_spectrum,
-                            sample_rate.clone(),
+                            &sample_rate,
                             cozy_ui::colors::HIGHLIGHT_COL32.gamma_multiply(
                                 ui.memory(|m| m.data.get_temp("active_amt".into()).unwrap_or(0.0)),
                             ),
@@ -294,7 +293,7 @@ pub fn create(
                         let filter_line_stopwatch = Sw::new_started();
                         match state.options.gradient_type {
                             GradientType::Rainbow => {
-                                draw_filter_line(ui, rect, &biquads, colorgrad::preset::rainbow())
+                                draw_filter_line(ui, rect, &biquads, colorgrad::preset::rainbow());
                             }
                             GradientType::Lesbian => draw_filter_line(
                                 ui,
@@ -377,7 +376,7 @@ pub fn create(
                         };
                         let draw_time = filter_line_stopwatch.elapsed();
                         ui.memory_mut(|memory| {
-                            memory.data.insert_temp("filter_elapsed".into(), draw_time)
+                            memory.data.insert_temp("filter_elapsed".into(), draw_time);
                         });
                     });
             });
@@ -434,7 +433,7 @@ pub fn create(
                     ui.image(include_image!("../assets/Cozy_logo.png"));
                     ui.vertical_centered(|ui| {
                         ui.heading(RichText::new("SCALE COLORIZR").strong());
-                        ui.label(RichText::new(format!("Version {}", VERSION)).italics());
+                        ui.label(RichText::new(format!("Version {VERSION}")).italics());
                         ui.hyperlink_to("Homepage", env!("CARGO_PKG_HOMEPAGE"));
                         ui.separator();
                         ui.heading(RichText::new("Credits"));
@@ -450,18 +449,13 @@ pub fn create(
                     ui.horizontal(|ui| {
                         ui.label("Voice Count");
                         ui.add(DragValue::from_get_set(|value| {
-                            match value {
-                                Some(v) => {
+                            value.map_or_else(|| f64::from(params.voice_count.modulated_normalized_value()), |v| {
                                     setter.begin_set_parameter(&params.voice_count);
                                     setter.set_parameter_normalized(&params.voice_count, v as f32);
                                     setter.end_set_parameter(&params.voice_count);
                                     v
-                                },
-                                None => {
-                                    params.voice_count.modulated_normalized_value() as f64
-                                }
-                            }
-                        }).custom_parser(|s| params.voice_count.string_to_normalized_value(s).map(|v| v as f64)).speed(0.01).range(0.0..=1.0).custom_formatter(|v, _| {
+                                })
+                        }).custom_parser(|s| params.voice_count.string_to_normalized_value(s).map(f64::from)).speed(0.01).range(0.0..=1.0).custom_formatter(|v, _| {
                             params.voice_count.normalized_value_to_string(v as f32, false)
                         }))
                     });
@@ -480,7 +474,7 @@ pub fn create(
                         ui.selectable_value(&mut state.options.gradient_type, GradientType::Custom, GradientType::Custom.to_string()).changed()
                     }).inner.is_some_and(|i| i);
 
-                    if let GradientType::Custom = state.options.gradient_type {
+                    if state.options.gradient_type == GradientType::Custom {
                         let to_remove: Vec<_> = state.options.gradient_colors.iter_mut().enumerate().filter_map(|(i, color)| ui.horizontal(|ui| {
                             let changed = ui.color_edit_button_srgb(color).changed();
                             if ui.button("Delete").clicked() {
@@ -519,6 +513,7 @@ fn draw_log_grid(ui: &Ui, rect: Rect) {
 
     let mut previous = 10.0;
     for max in PowersOfTen::new(10.0, 20_000.0) {
+        #[allow(clippy::cast_sign_loss)]
         for freq in (previous as i32..=max as i32).step_by(max as usize / 10) {
             let freq = freq.max(20) as f32;
             let x = ((freq.log10() - log_min) * (rect.width() - 1.0)) / (log_max - log_min)
@@ -532,6 +527,8 @@ fn draw_log_grid(ui: &Ui, rect: Rect) {
                 Stroke::new(1.0, Color32::DARK_GRAY.gamma_multiply(0.5)),
             );
 
+            #[allow(clippy::float_cmp)]
+            // in testing this hasn't blown up, but this is a culprit if any flickering or random dissapearing is reported
             if freq == max {
                 painter.text(
                     pos2(x + 5.0, rect.bottom() - 10.0),
@@ -560,7 +557,7 @@ fn draw_spectrum(
     ui: &Ui,
     rect: Rect,
     spectrum: &mut SpectrumOutput,
-    sample_rate: Arc<AtomicF32>,
+    sample_rate: &AtomicF32,
     color: Color32,
 ) {
     let painter = ui.painter_at(rect);
@@ -592,7 +589,10 @@ fn draw_spectrum(
 
             let height = magnitude_height(*magnitude);
 
-            Some(pos2(x_coord, rect.top() + (rect.height() * (1.0 - height))))
+            Some(pos2(
+                x_coord,
+                rect.height().mul_add(1.0 - height, rect.top()),
+            ))
         })
         .collect();
 
@@ -619,7 +619,7 @@ fn draw_spectrum(
 }
 
 fn draw_filter_line<G: Gradient + Sync + Send + 'static>(
-    ui: &mut Ui,
+    ui: &Ui,
     rect: Rect,
     biquads: &Arc<FilterDisplay>,
     gradient: G,
@@ -630,6 +630,7 @@ fn draw_filter_line<G: Gradient + Sync + Send + 'static>(
 
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let mut points = Vec::with_capacity(rect.width().round() as usize);
+    #[allow(clippy::cast_sign_loss)]
     let mut sampled_frequencies = Vec::with_capacity(rect.width().round() as usize);
 
     let active_biquads: Vec<SVF<_>> = biquads
@@ -646,9 +647,10 @@ fn draw_filter_line<G: Gradient + Sync + Send + 'static>(
     #[allow(clippy::cast_possible_truncation)]
     for i in rect.left() as i32..=rect.right() as i32 {
         let x = i as f32;
-        let freq = ((log_min * (rect.left() + rect.width() - x - 1.0)
-            + log_max * (x - rect.left()))
-            / ((rect.width() - 1.0) * E.log10()))
+        let freq = (log_min.mul_add(
+            rect.left() + rect.width() - x - 1.0,
+            log_max * (x - rect.left()),
+        ) / ((rect.width() - 1.0) * E.log10()))
         .exp();
 
         sampled_frequencies.push(freq);
@@ -661,7 +663,7 @@ fn draw_filter_line<G: Gradient + Sync + Send + 'static>(
         points.push(Pos2::new(
             x,
             remap(
-                (result.norm().log10() * 0.05 + 0.5).max(0.0),
+                result.norm().log10().mul_add(0.05, 0.5).max(0.0),
                 0.0..=1.0,
                 rect.bottom_up_range(),
             ),
@@ -670,7 +672,7 @@ fn draw_filter_line<G: Gradient + Sync + Send + 'static>(
 
     ui.memory_mut(|m| {
         m.data
-            .insert_temp("sampled_frequencies".into(), sampled_frequencies)
+            .insert_temp("sampled_frequencies".into(), sampled_frequencies);
     });
 
     // DISGUSTING: i would MUCH rather meshify the line so i can apply shaders
@@ -687,7 +689,7 @@ fn draw_filter_line<G: Gradient + Sync + Send + 'static>(
 
             let noise_value = remap(
                 NOISE.get([
-                    remap_clamp(pos.x, bounds.x_range(), 0.0..=1.5) as f64,
+                    f64::from(remap_clamp(pos.x, bounds.x_range(), 0.0..=1.5)),
                     animation_position + offset,
                 ]) as f32,
                 -0.5..=0.5,
@@ -722,6 +724,7 @@ fn switch<T: Enum + PartialEq>(ui: &mut Ui, param: &EnumParam<T>, setter: &Param
                     let (rect, response) =
                         ui.allocate_exact_size(galley.rect.size(), Sense::click());
                     let response = response.on_hover_cursor(egui::CursorIcon::Grab);
+                    #[allow(clippy::float_cmp)]
                     ui.painter_at(rect).galley(
                         pos2(
                             rect.center().x - galley.size().x / 2.0,

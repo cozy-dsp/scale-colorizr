@@ -33,6 +33,7 @@ use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::f32::consts::E;
 use std::fs;
+use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -72,13 +73,28 @@ static CONFIG_DIR: Lazy<PathBuf> = Lazy::new(|| {
 });
 static CONFIG_FILE: Lazy<PathBuf> = Lazy::new(|| CONFIG_DIR.join("config.toml"));
 
-#[derive(Default)]
 struct EditorState {
     show_debug: bool,
     show_about: bool,
     show_settings: bool,
     config_io_error: Option<String>,
     options: EditorOptions,
+    pre_spectrum: SpectrumOutput,
+    post_spectrum: SpectrumOutput,
+}
+
+impl EditorState {
+    fn new(pre_spectrum: SpectrumOutput, post_spectrum: SpectrumOutput) -> Self {
+        Self {
+            show_debug: false,
+            show_about: false,
+            show_settings: false,
+            config_io_error: None,
+            options: EditorOptions::default(),
+            pre_spectrum,
+            post_spectrum,
+        }
+    }
 }
 
 #[derive(Default, Deserialize, Serialize, Display, PartialEq)]
@@ -105,15 +121,15 @@ pub fn default_editor_state() -> Arc<EguiState> {
 pub fn create(
     params: Arc<ScaleColorizrParams>,
     displays: Arc<FrequencyDisplay>,
-    pre_spectrum: Arc<Mutex<SpectrumOutput>>,
-    post_spectrum: Arc<Mutex<SpectrumOutput>>,
+    pre_spectrum: SpectrumOutput,
+    post_spectrum: SpectrumOutput,
     sample_rate: Arc<AtomicF32>,
     midi_debug: Arc<AtomicCell<Option<NoteEvent<()>>>>,
     biquads: Arc<FilterDisplay>,
 ) -> Option<Box<dyn Editor>> {
     create_egui_editor(
         params.editor_state.clone(),
-        EditorState::default(),
+        EditorState::new(pre_spectrum, post_spectrum),
         |ctx, state| {
             cozy_ui::setup(ctx);
             ctx.style_mut(|style| {
@@ -254,7 +270,7 @@ pub fn create(
                         draw_spectrum(
                             ui,
                             rect,
-                            &pre_spectrum,
+                            &mut state.pre_spectrum,
                             sample_rate.clone(),
                             Color32::GRAY.gamma_multiply(remap(
                                 ui.ctx().animate_bool(
@@ -268,7 +284,7 @@ pub fn create(
                         draw_spectrum(
                             ui,
                             rect,
-                            &post_spectrum,
+                            &mut state.post_spectrum,
                             sample_rate.clone(),
                             cozy_ui::colors::HIGHLIGHT_COL32.gamma_multiply(
                                 ui.memory(|m| m.data.get_temp("active_amt".into()).unwrap_or(0.0)),
@@ -543,13 +559,13 @@ fn draw_log_grid(ui: &Ui, rect: Rect) {
 fn draw_spectrum(
     ui: &Ui,
     rect: Rect,
-    spectrum: &Mutex<SpectrumOutput>,
+    spectrum: &mut SpectrumOutput,
     sample_rate: Arc<AtomicF32>,
     color: Color32,
 ) {
     let painter = ui.painter_at(rect);
-    let mut lock = spectrum.lock();
-    let spectrum_data = lock.read();
+
+    let spectrum_data = spectrum.read();
     let nyquist = sample_rate.load(std::sync::atomic::Ordering::Relaxed) / 2.0;
 
     let bin_freq = |bin_idx: f32| (bin_idx / spectrum_data.len() as f32) * nyquist;

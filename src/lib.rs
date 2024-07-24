@@ -1,5 +1,6 @@
 #![feature(portable_simd)]
 #![feature(array_windows)]
+#![warn(clippy::pedantic, clippy::nursery)]
 
 mod editor;
 mod spectrum;
@@ -45,9 +46,9 @@ pub struct ScaleColorizr {
     midi_event_debug: Arc<AtomicCell<Option<NoteEvent<()>>>>,
     next_internal_voice_id: u64,
     pre_spectrum_input: SpectrumInput,
-    pre_spectrum_output: Arc<Mutex<SpectrumOutput>>,
+    pre_spectrum_output: Option<SpectrumOutput>,
     post_spectrum_input: SpectrumInput,
-    post_spectrum_output: Arc<Mutex<SpectrumOutput>>,
+    post_spectrum_output: Option<SpectrumOutput>,
 }
 
 #[derive(Enum, PartialEq)]
@@ -99,9 +100,9 @@ impl Default for ScaleColorizr {
             midi_event_debug: Arc::new(AtomicCell::new(None)),
             next_internal_voice_id: 0,
             pre_spectrum_input,
-            pre_spectrum_output: Arc::new(Mutex::new(pre_spectrum_output)),
+            pre_spectrum_output: Some(pre_spectrum_output),
             post_spectrum_input,
-            post_spectrum_output: Arc::new(Mutex::new(post_spectrum_output)),
+            post_spectrum_output: Some(post_spectrum_output),
         }
     }
 }
@@ -154,6 +155,7 @@ impl Default for ScaleColorizrParams {
 
             delta: BoolParam::new("Delta", false),
             safety_switch: BoolParam::new("SAFETY SWITCH", true).hide(),
+            #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
             voice_count: IntParam::new(
                 "Voices",
                 16,
@@ -212,8 +214,8 @@ impl Plugin for ScaleColorizr {
         editor::create(
             self.params.clone(),
             self.frequency_display.clone(),
-            self.pre_spectrum_output.clone(),
-            self.post_spectrum_output.clone(),
+            self.pre_spectrum_output.take().expect("either the pre spectrum didn't initialize properly, or the editor is being queried twice. either way, something has gone horribly wrong"),
+            self.post_spectrum_output.take().expect("either the post spectrum didn't initialize properly, or the editor is being queried twice. either way, something has gone horribly wrong"),
             self.sample_rate.clone(),
             self.midi_event_debug.clone(),
             self.filter_display.clone(),
@@ -247,6 +249,7 @@ impl Plugin for ScaleColorizr {
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     fn process(
         &mut self,
         buffer: &mut Buffer,
@@ -271,75 +274,13 @@ impl Plugin for ScaleColorizr {
         let mut block_start: usize = 0;
         let mut block_end: usize = MAX_BLOCK_SIZE.min(num_samples);
         while block_start < num_samples {
-            // First of all, handle all note events that happen at the start of the block, and cut
-            // the block short if another event happens before the end of it.
-            'events: loop {
-                match next_event {
-                    // If the event happens now, then we'll keep processing events
-                    Some(event) if (event.timing() as usize) <= block_start => {
-                        // This synth doesn't support any of the polyphonic expression events. A
-                        // real synth plugin however will want to support those.
-                        match event {
-                            NoteEvent::NoteOn {
-                                timing,
-                                voice_id,
-                                channel,
-                                note,
-                                velocity,
-                            } => {
-                                // This starts with the attack portion of the amplitude envelope
-                                let amp_envelope = Smoother::new(SmoothingStyle::Exponential(
-                                    self.params.attack.value(),
-                                ));
-                                amp_envelope.reset(0.0);
-                                amp_envelope.set_target(sample_rate, 1.0);
-
-                                let voice =
-                                    self.start_voice(context, timing, voice_id, channel, note);
-                                voice.velocity_sqrt = velocity.sqrt();
-                                voice.amp_envelope = amp_envelope;
-                            }
-                            NoteEvent::NoteOff {
-                                timing: _,
-                                voice_id,
-                                channel,
-                                note,
-                                velocity: _,
-                            } => {
-                                self.start_release_for_voices(sample_rate, voice_id, channel, note);
-                            }
-                            NoteEvent::Choke {
-                                timing,
-                                voice_id,
-                                channel,
-                                note,
-                            } => {
-                                self.choke_voices(context, timing, voice_id, channel, note);
-                            }
-                            NoteEvent::PolyTuning {
-                                voice_id,
-                                channel,
-                                note,
-                                tuning,
-                                ..
-                            } => {
-                                self.midi_event_debug.store(Some(event));
-                                self.retune_voice(voice_id, channel, note, tuning)
-                            }
-                            _ => {}
-                        };
-
-                        next_event = context.next_event();
-                    }
-                    // If the event happens before the end of the block, then the block should be cut
-                    // short so the next block starts at the event
-                    Some(event) if (event.timing() as usize) < block_end => {
-                        block_end = event.timing() as usize;
-                        break 'events;
-                    }
-                    _ => break 'events,
-                }
-            }
+            self.process_events(
+                &mut next_event,
+                block_start,
+                sample_rate,
+                context,
+                &mut block_end,
+            );
 
             // These are the smoothed global parameter values. These are used for voices that do not
             // have polyphonic modulation applied to them. With a plugin as simple as this it would
@@ -610,7 +551,85 @@ impl ScaleColorizr {
             .filter_map(|v| v.as_mut())
             .find(|v| voice_id == Some(v.id) || (v.channel == channel && v.note == note))
         {
-            voice.frequency = util::f32_midi_note_to_freq(note as f32 + tuning);
+            voice.frequency = util::f32_midi_note_to_freq(f32::from(note) + tuning);
+        }
+    }
+
+    fn process_events(
+        &mut self,
+        next_event: &mut Option<NoteEvent<()>>,
+        block_start: usize,
+        sample_rate: f32,
+        context: &mut impl ProcessContext<Self>,
+        block_end: &mut usize,
+    ) {
+        // First of all, handle all note events that happen at the start of the block, and cut
+        // the block short if another event happens before the end of it.
+        'events: loop {
+            match *next_event {
+                // If the event happens now, then we'll keep processing events
+                Some(event) if (event.timing() as usize) <= block_start => {
+                    // This synth doesn't support any of the polyphonic expression events. A
+                    // real synth plugin however will want to support those.
+                    match event {
+                        NoteEvent::NoteOn {
+                            timing,
+                            voice_id,
+                            channel,
+                            note,
+                            velocity,
+                        } => {
+                            // This starts with the attack portion of the amplitude envelope
+                            let amp_envelope = Smoother::new(SmoothingStyle::Exponential(
+                                self.params.attack.value(),
+                            ));
+                            amp_envelope.reset(0.0);
+                            amp_envelope.set_target(sample_rate, 1.0);
+
+                            let voice = self.start_voice(context, timing, voice_id, channel, note);
+                            voice.velocity_sqrt = velocity.sqrt();
+                            voice.amp_envelope = amp_envelope;
+                        }
+                        NoteEvent::NoteOff {
+                            timing: _,
+                            voice_id,
+                            channel,
+                            note,
+                            velocity: _,
+                        } => {
+                            self.start_release_for_voices(sample_rate, voice_id, channel, note);
+                        }
+                        NoteEvent::Choke {
+                            timing,
+                            voice_id,
+                            channel,
+                            note,
+                        } => {
+                            self.choke_voices(context, timing, voice_id, channel, note);
+                        }
+                        NoteEvent::PolyTuning {
+                            voice_id,
+                            channel,
+                            note,
+                            tuning,
+                            ..
+                        } => {
+                            self.midi_event_debug.store(Some(event));
+                            self.retune_voice(voice_id, channel, note, tuning);
+                        }
+                        _ => {}
+                    };
+
+                    *next_event = context.next_event();
+                }
+                // If the event happens before the end of the block, then the block should be cut
+                // short so the next block starts at the event
+                Some(event) if (event.timing() as usize) < *block_end => {
+                    *block_end = event.timing() as usize;
+                    break 'events;
+                }
+                _ => break 'events,
+            }
         }
     }
 }

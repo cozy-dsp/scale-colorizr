@@ -9,7 +9,7 @@ use cozy_ui::centered;
 use cozy_ui::colors::HIGHLIGHT_COL32;
 use cozy_ui::widgets::button::toggle;
 use cozy_ui::widgets::Knob;
-use cozy_util::svf::SVF;
+use cozy_util::filter::svf::GenericSVF;
 use crossbeam::atomic::AtomicCell;
 use directories::ProjectDirs;
 use libsw::Sw;
@@ -633,7 +633,7 @@ fn draw_filter_line<G: Gradient + Sync + Send + 'static>(
     #[allow(clippy::cast_sign_loss)]
     let mut sampled_frequencies = Vec::with_capacity(rect.width().round() as usize);
 
-    let active_biquads: Vec<SVF<_>> = biquads
+    let active_biquads: Vec<GenericSVF<_>> = biquads
         .iter()
         .flatten()
         .filter_map(AtomicCell::load)

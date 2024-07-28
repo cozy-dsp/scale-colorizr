@@ -18,11 +18,12 @@ required-features = ["editor"]
 
 [features]
 editor = ["nih_plug/standalone"]
+fma = ["cozy-util/fma"]
 
 [dependencies]
 crossbeam = "0.8.4"
 colorgrad = { git = "https://github.com/mazznoer/colorgrad-rs.git" }
-cozy-util = { registry = "cdsp", version = "0.1.0", features = ["simd"] }
+cozy-util = { registry = "cdsp", version = "0.2.2", features = ["simd"] }
 nih_plug = { git = "https://github.com/murl-digital/nih-plug.git", branch = "bump-dependencies", features = [
     "assert_process_allocs",
     "simd",

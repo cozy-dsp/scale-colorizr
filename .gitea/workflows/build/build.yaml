@@ -3,7 +3,7 @@ name: Build
 on:
   push:
     branches:
-      - '**'
+      - "**"
 
 defaults:
   run:
@@ -16,9 +16,13 @@ jobs:
     strategy:
       matrix:
         include:
-          - { name: ubuntu-20.04,       os: ubuntu-20.04,   cross-target: '' }
-          - { name: macos-universal,    os: macos-10,       cross-target: aarch64-apple-darwin }
-          - { name: windows,            os: windows-latest, cross-target: '' }
+          - { name: ubuntu-20.04, os: ubuntu-20.04, cross-target: "" }
+          - {
+              name: macos-universal,
+              os: macos-10,
+              cross-target: aarch64-apple-darwin,
+            }
+          - { name: windows, os: windows-latest, cross-target: "" }
     name: Package plugin binaries
     runs-on: ${{ matrix.os }}
     steps:
@@ -61,15 +65,15 @@ jobs:
           runner_name=${{ matrix.name }}
           if [[ $runner_name = 'macos-universal' ]]; then
             export MACOSX_DEPLOYMENT_TARGET=10.13
-            export RUSTFLAGS="-C link-args=-Wl,-undefined,dynamic_lookup"
+            export RUSTFLAGS="-C link-args=-Wl,-undefined,dynamic_lookup,target_feature=+sse,+sse2,+sse3,+sse4,+sse4.1,+avx"
             cargo xtask bundle-universal "${package_args[@]}" --release
           else
             cross_target=${{ matrix.cross-target }}
             if [[ -n $cross_target ]]; then
               package_args+=("--target" "$cross_target")
             fi
-
-            cargo xtask bundle "${package_args[@]}" --release
+            export RUSTFLAGS="-Ctarget_feature=+sse,+sse2,+sse3,+sse4,+sse4.1,+avx,+avx2,+fma"
+            cargo xtask bundle "${package_args[@]}" --release --features fma
           fi
 
       - name: Determine build archive name

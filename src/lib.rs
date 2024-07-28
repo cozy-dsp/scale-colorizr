@@ -5,7 +5,7 @@
 mod editor;
 mod spectrum;
 
-use cozy_util::svf::SVF;
+use cozy_util::filter::svf::GenericSVF;
 use crossbeam::atomic::AtomicCell;
 use nih_plug::prelude::*;
 use nih_plug_egui::EguiState;
@@ -18,7 +18,7 @@ pub const NUM_VOICES: usize = 128;
 pub const NUM_FILTERS: usize = 8;
 
 pub type FrequencyDisplay = [[AtomicCell<Option<f32>>; NUM_FILTERS]; NUM_VOICES];
-pub type FilterDisplay = [[AtomicCell<Option<SVF<f32x2>>>; NUM_FILTERS]; NUM_VOICES];
+pub type FilterDisplay = [[AtomicCell<Option<GenericSVF<f32x2>>>; NUM_FILTERS]; NUM_VOICES];
 
 pub const VERSION: &str = env!("VERGEN_GIT_DESCRIBE");
 
@@ -30,7 +30,7 @@ struct Voice {
     frequency: f32,
     internal_voice_id: u64,
     velocity_sqrt: f32,
-    filters: [SVF<f32x2>; NUM_FILTERS],
+    filters: [GenericSVF<f32x2>; NUM_FILTERS],
     releasing: bool,
     amp_envelope: Smoother<f32>,
 }
@@ -428,7 +428,7 @@ impl ScaleColorizr {
             releasing: false,
             amp_envelope: Smoother::none(),
 
-            filters: [SVF::default(); NUM_FILTERS],
+            filters: [GenericSVF::default(); NUM_FILTERS],
         };
         self.next_internal_voice_id = self.next_internal_voice_id.wrapping_add(1);
 

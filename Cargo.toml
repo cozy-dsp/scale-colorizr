@@ -35,7 +35,7 @@ rand = "0.8"
 serde = { version = "1.0", features = ["derive"] }
 once_cell = { version = "1", features = ["parking_lot"] }
 libsw = "3.3"
-cozy-ui = { git = "https://vcs.cozydsp.space/cozy-dsp/cozy-ui.git", version = "0.2.0" }
+cozy-ui = { registry = "cdsp", version = "0.2.0" }
 egui_extras = { version = "0.28", features = ["image"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 realfft = "3.3"

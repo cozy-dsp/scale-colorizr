@@ -479,31 +479,21 @@ impl ScaleColorizr {
         channel: u8,
         note: u8,
     ) {
-        for voice in &mut self.voices {
-            match voice {
-                Some(Voice {
-                    id: candidate_voice_id,
-                    channel: candidate_channel,
-                    note: candidate_note,
-                    releasing,
-                    amp_envelope,
-                    ..
-                }) if voice_id == Some(*candidate_voice_id)
-                    || (channel == *candidate_channel && note == *candidate_note) =>
-                {
-                    *releasing = true;
-                    amp_envelope.style = SmoothingStyle::Exponential(self.params.release.value());
-                    amp_envelope.set_target(sample_rate, 0.0);
-
-                    // If this targetted a single voice ID, we're done here. Otherwise there may be
-                    // multiple overlapping voices as we enabled support for that in the
-                    // `PolyModulationConfig`.
-                    if voice_id.is_some() {
-                        return;
-                    }
-                }
-                _ => (),
-            }
+        for voice in self
+            .voices
+            .iter_mut()
+            .filter_map(|v| {
+                v.as_mut().filter(|v| {
+                    voice_id.is_some_and(|id| v.id == id)
+                        || (v.channel == channel && v.note == note)
+                })
+            })
+            // if we were provided with a voice id, take the first thing in the iterator. otherwise, all of em
+            .take(voice_id.map_or(usize::MAX, |_| 1))
+        {
+            voice.releasing = true;
+            voice.amp_envelope.style = SmoothingStyle::Exponential(self.params.release.value());
+            voice.amp_envelope.set_target(sample_rate, 0.0);
         }
     }
 
@@ -518,30 +508,26 @@ impl ScaleColorizr {
         channel: u8,
         note: u8,
     ) {
-        for voice in &mut self.voices {
-            match voice {
-                Some(Voice {
-                    id: candidate_voice_id,
-                    channel: candidate_channel,
-                    note: candidate_note,
-                    ..
-                }) if voice_id == Some(*candidate_voice_id)
-                    || (channel == *candidate_channel && note == *candidate_note) =>
-                {
-                    context.send_event(NoteEvent::VoiceTerminated {
-                        timing: sample_offset,
-                        // Notice how we always send the terminated voice ID here
-                        voice_id: Some(*candidate_voice_id),
-                        channel,
-                        note,
-                    });
-                    *voice = None;
-
-                    if voice_id.is_some() {
-                        return;
-                    }
-                }
-                _ => (),
+        for voice in self
+            .voices
+            .iter_mut()
+            .filter(|v| {
+                v.as_ref().is_some_and(|v| {
+                    voice_id.is_some_and(|id| v.id == id)
+                        || (v.channel == channel && v.note == note)
+                })
+            })
+            // if we were provided with a voice id, take the first thing in the iterator. otherwise, all of em
+            .take(voice_id.map_or(usize::MAX, |_| 1))
+        {
+            if let Some(voice) = voice.take() {
+                context.send_event(NoteEvent::VoiceTerminated {
+                    timing: sample_offset,
+                    // Notice how we always send the terminated voice ID here
+                    voice_id: Some(voice.id),
+                    channel,
+                    note,
+                });
             }
         }
     }
@@ -567,10 +553,11 @@ impl ScaleColorizr {
     ) {
         // First of all, handle all note events that happen at the start of the block, and cut
         // the block short if another event happens before the end of it.
-        'events: loop {
+        loop {
             match *next_event {
                 // If the event happens now, then we'll keep processing events
                 Some(event) if (event.timing() as usize) <= block_start => {
+                    self.midi_event_debug.store(Some(event));
                     // This synth doesn't support any of the polyphonic expression events. A
                     // real synth plugin however will want to support those.
                     match event {
@@ -616,7 +603,6 @@ impl ScaleColorizr {
                             tuning,
                             ..
                         } => {
-                            self.midi_event_debug.store(Some(event));
                             self.retune_voice(voice_id, channel, note, tuning);
                         }
                         _ => {}
@@ -628,9 +614,9 @@ impl ScaleColorizr {
                 // short so the next block starts at the event
                 Some(event) if (event.timing() as usize) < *block_end => {
                     *block_end = event.timing() as usize;
-                    break 'events;
+                    return;
                 }
-                _ => break 'events,
+                _ => return,
             }
         }
     }
